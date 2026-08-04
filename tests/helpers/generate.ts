@@ -17,6 +17,8 @@ export interface FuzzOptions {
   readonly nodeCount?: number
   /** Stop generating adversarial actions after this time, so liveness can be tested. */
   readonly quietAfter?: number
+  /** Force a compaction threshold instead of drawing one. 0 disables compaction. */
+  readonly snapshotThreshold?: number
 }
 
 /**
@@ -42,6 +44,14 @@ export function fuzzScenario(seed: number, options: FuzzOptions = {}): Scenario 
 
   const maxTime = options.maxTime ?? 25_000
   const quietAfter = options.quietAfter ?? maxTime
+
+  // §7 — compaction on most runs, and aggressively when on. A threshold of 1 or 2
+  // means servers discard almost as fast as they apply, so `nextIndex` falls into the
+  // discarded range constantly and InstallSnapshot becomes the common path rather than
+  // a rare one. A gentle threshold would let the fuzz suite report green while barely
+  // exercising §7 at all.
+  const drawSnapshot = options.snapshotThreshold ?? nextInt(prng, 0, 4).value
+  if (options.snapshotThreshold === undefined) prng = nextInt(prng, 0, 4).prng
 
   const drawActionCount = nextInt(prng, 4, 26)
   prng = drawActionCount.prng
@@ -118,6 +128,7 @@ export function fuzzScenario(seed: number, options: FuzzOptions = {}): Scenario 
     electionTimeoutMax: 300,
     heartbeatInterval: 40,
     flags: options.flags ?? UNMODIFIED_RAFT,
+    snapshotThreshold: drawSnapshot,
     actions,
     maxSteps: options.maxSteps ?? 6000,
     maxTime,

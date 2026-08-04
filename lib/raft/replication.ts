@@ -9,8 +9,10 @@ import { resetElectionTimer, resetHeartbeatTimer, stopElectionTimer } from './ti
 import { advanceCommitIndex } from './commit'
 import {
   append,
+  compact,
   entryAt,
   hasIndex,
+  installSnapshot,
   lastLogIndex,
   replaceFrom,
   sliceFrom,
@@ -19,6 +21,8 @@ import {
 import type {
   AppendEntriesRequest,
   AppendEntriesResponse,
+  InstallSnapshotRequest,
+  InstallSnapshotResponse,
   Message,
   NodeId,
   NodeState,
@@ -72,6 +76,39 @@ export function becomeLeader(state: NodeState, config: RaftConfig): Transition {
 }
 
 /**
+ * §7 — "when the leader has already discarded the next log entry that it needs to send
+ * to a follower", it sends the snapshot instead.
+ *
+ * This is the one place the two replication paths diverge, and the condition is
+ * exactly that `nextIndex` has fallen at or below what the leader still holds.
+ */
+export function needsSnapshot(state: NodeState, to: NodeId): boolean {
+  const next = state.nextIndex[to] ?? lastLogIndex(state.log) + 1
+  return next <= state.log.lastIncludedIndex
+}
+
+/** Figure 13, InstallSnapshot RPC, Arguments. */
+export function buildInstallSnapshot(state: NodeState, to: NodeId): InstallSnapshotRequest {
+  return {
+    type: 'InstallSnapshot',
+    from: state.id,
+    to,
+    term: state.currentTerm,
+    leaderId: state.id,
+    lastIncludedIndex: state.log.lastIncludedIndex,
+    lastIncludedTerm: state.log.lastIncludedTerm,
+    // The state machine through the snapshot point. Sent whole; see the note on
+    // `InstallSnapshotRequest` about why chunking is not modelled.
+    data: state.stateMachine.slice(0, state.log.lastIncludedIndex),
+  }
+}
+
+/** Whichever of the two replication messages this follower can actually use. */
+export function buildReplication(state: NodeState, to: NodeId): Message {
+  return needsSnapshot(state, to) ? buildInstallSnapshot(state, to) : buildAppendEntries(state, to)
+}
+
+/**
  * Figure 2, Rules for Servers, Leaders rule 3 — "If last log index >= nextIndex for a
  * follower: send AppendEntries with log entries starting at nextIndex". An empty
  * `entries` array is the heartbeat case of the same message.
@@ -94,7 +131,7 @@ export function buildAppendEntries(state: NodeState, to: NodeId): AppendEntriesR
 
 /** Heartbeat / replication sweep to every peer. */
 export function broadcastAppendEntries(state: NodeState, config: RaftConfig): readonly Message[] {
-  return peersOf(state.id, config.nodeCount).map((peer) => buildAppendEntries(state, peer))
+  return peersOf(state.id, config.nodeCount).map((peer) => buildReplication(state, peer))
 }
 
 /**
@@ -264,7 +301,109 @@ export function handleAppendEntriesResponse(
   const hinted = Math.min(current - 1, response.matchIndex + 1)
   nextIndex[response.from] = Math.max(1, hinted)
   const leader: NodeState = { ...state, nextIndex }
-  return { state: leader, outbox: [buildAppendEntries(leader, response.from)], timers: [] }
+  // If walking back has gone past what the leader still holds, the retry cannot be an
+  // AppendEntries at all — §7, and the single reason InstallSnapshot exists.
+  return { state: leader, outbox: [buildReplication(leader, response.from)], timers: [] }
+}
+
+// ---------------------------------------------------------------------------
+// §7 — snapshots
+// ---------------------------------------------------------------------------
+
+/**
+ * Figure 13, InstallSnapshot RPC, Receiver implementation.
+ *
+ * Rules 2, 3 and 4 concern reassembling a chunked transfer and have no counterpart
+ * here — see the note on `InstallSnapshotRequest`. Rules 1, 5, 6, 7 and 8 are below.
+ */
+export function handleInstallSnapshot(
+  state: NodeState,
+  request: InstallSnapshotRequest,
+  config: RaftConfig,
+): Transition {
+  const reply = (node: NodeState): InstallSnapshotResponse => ({
+    type: 'InstallSnapshotResponse',
+    from: node.id,
+    to: request.from,
+    term: node.currentTerm,
+    lastIncludedIndex: node.log.lastIncludedIndex,
+  })
+
+  // Figure 13, receiver rule 1: "Reply immediately if term < currentTerm".
+  if (request.term < state.currentTerm) {
+    return { state, outbox: [reply(state)], timers: [] }
+  }
+
+  // A snapshot is a message from the leader for this term, so the follower recognises
+  // it and resets its election timeout, exactly as for AppendEntries.
+  let node: NodeState = { ...state, role: 'follower', leaderId: request.leaderId }
+  const timerReset = resetElectionTimer(node, config)
+  node = timerReset.state
+  const timers: readonly TimerRequest[] = [timerReset.timer]
+
+  // Figure 13, receiver rule 5: "discard any existing or partial snapshot with a
+  // smaller index" — here, ignore a snapshot that is not ahead of where we already are.
+  if (request.lastIncludedIndex <= node.log.lastIncludedIndex) {
+    return { state: node, outbox: [reply(node)], timers }
+  }
+
+  // Figure 13, receiver rules 6 and 7 — retain the suffix if the log agrees at the
+  // snapshot point, otherwise discard the log entirely. Both live in `log.ts`.
+  const log = installSnapshot(node.log, request.lastIncludedIndex, request.lastIncludedTerm)
+
+  // Figure 13, receiver rule 8: "Reset state machine using snapshot contents".
+  const stateMachine = [...node.stateMachine]
+  for (let index = 1; index <= request.lastIncludedIndex; index += 1) {
+    const command = request.data[index - 1]
+    if (command !== undefined) stateMachine[index - 1] = command
+  }
+
+  node = {
+    ...node,
+    log,
+    stateMachine,
+    // The snapshot is by definition committed and applied on the leader, so the
+    // follower is now at least that far along on both counts. Neither may move
+    // backwards: a delayed snapshot must not un-apply anything.
+    commitIndex: Math.max(node.commitIndex, request.lastIncludedIndex),
+    lastApplied: Math.max(node.lastApplied, request.lastIncludedIndex),
+  }
+  return { state: node, outbox: [reply(node)], timers }
+}
+
+/** The leader's side: treat an installed snapshot as a match through its index. */
+export function handleInstallSnapshotResponse(
+  state: NodeState,
+  response: InstallSnapshotResponse,
+): Transition {
+  if (state.role !== 'leader' || response.term !== state.currentTerm) {
+    return { state, outbox: [], timers: [] }
+  }
+  const matchIndex = [...state.matchIndex]
+  const nextIndex = [...state.nextIndex]
+  matchIndex[response.from] = Math.max(matchIndex[response.from] ?? 0, response.lastIncludedIndex)
+  nextIndex[response.from] = Math.max(
+    nextIndex[response.from] ?? 1,
+    (matchIndex[response.from] ?? 0) + 1,
+  )
+  return { state: { ...state, matchIndex, nextIndex }, outbox: [], timers: [] }
+}
+
+/**
+ * §7 — "each server takes snapshots independently, covering just the committed entries
+ * in its own log."
+ *
+ * A server may only discard entries it has *applied*: `lastApplied`, never
+ * `commitIndex`, is the ceiling. Discarding an entry that is committed but not yet
+ * applied would lose it from both the log and the state machine at once.
+ */
+export function maybeSnapshot(state: NodeState, config: RaftConfig): NodeState {
+  if (config.snapshotThreshold <= 0) return state
+  const pending = state.lastApplied - state.log.lastIncludedIndex
+  if (pending < config.snapshotThreshold) return state
+  const log = compact(state.log, state.lastApplied)
+  if (log === state.log) return state
+  return { ...state, log }
 }
 
 /** True when the leader has entries the follower is known to be missing. */

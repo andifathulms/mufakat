@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lastLogIndex } from '@/lib/raft/log'
+import { heldEntries, lastLogIndex } from '@/lib/raft/log'
 import { run } from '@/lib/sim/simulation'
 import { fuzzScenario } from '../helpers/generate'
 
@@ -55,6 +55,39 @@ describe('invariant fuzzing — unmodified Raft', () => {
     expect(elections).toBeGreaterThan(190)
     expect(commits).toBeGreaterThan(150)
     expect(divergences).toBeGreaterThan(150)
+  })
+
+  it('exercises §7 rather than reporting green with compaction switched off', () => {
+    // A compaction bug that only appears once servers actually discard entries would
+    // hide behind a suite where they never do. Assert the paths are taken: servers
+    // compact, snapshots are transferred, and *both* Figure 13 receiver rules fire —
+    // rule 6 retaining a suffix, rule 7 discarding the log outright.
+    let compacted = 0
+    let installsDelivered = 0
+    let retainedSuffix = 0
+    let discardedLog = 0
+
+    for (let seed = 1; seed <= 300; seed += 1) {
+      const trace = run(fuzzScenario(seed))
+      const last = trace.steps[trace.steps.length - 1]
+      if (last === undefined) continue
+      if (last.nodes.some((node) => node.log.lastIncludedIndex > 0)) compacted += 1
+      for (const step of trace.steps) {
+        if (step.event.kind === 'deliver' && step.event.message.type === 'InstallSnapshot') {
+          installsDelivered += 1
+        }
+      }
+      for (const node of last.nodes) {
+        if (node.log.lastIncludedIndex === 0) continue
+        if (heldEntries(node.log).length > 0) retainedSuffix += 1
+        else discardedLog += 1
+      }
+    }
+
+    expect(compacted).toBeGreaterThan(100)
+    expect(installsDelivered).toBeGreaterThan(100)
+    expect(retainedSuffix).toBeGreaterThan(50)
+    expect(discardedLog).toBeGreaterThan(50)
   })
 })
 

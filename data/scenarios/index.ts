@@ -426,6 +426,40 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
   },
 
   {
+    id: 'log-compaction',
+    title: 'Snapshot untuk follower yang tertinggal',
+    summary:
+      'Satu follower terputus selama cluster terus meng-commit. Leader sudah membuang entry yang dibutuhkannya, jadi AppendEntries tidak bisa mengejarnya — yang dikirim adalah snapshot.',
+    phenomenon: {
+      id:
+        'Setiap server membuat snapshot sendiri-sendiri begitu ia sudah menerapkan cukup banyak entry, lalu membuang entry di bawahnya — hanya sampai lastApplied, tidak pernah lebih. Ketika partisi sembuh, node 4 begitu tertinggal sehingga nextIndex untuk dirinya jatuh ke dalam rentang yang sudah dibuang leader. Pada titik itu AppendEntries tidak bisa lagi menolongnya: entry yang diperlukan sudah tidak ada. Leader mengirim InstallSnapshot, dan node 4 mengganti state machine-nya sekaligus. Di ledger, baris di bawah titik snapshot berubah menjadi arsir — bukan kosong, karena entry itu tidak hilang, melainkan sudah terlipat ke dalam state.',
+      en: "Each server snapshots independently once it has applied enough entries, discarding what lies below — up to lastApplied and never further. When the partition heals, node 4 is so far behind that its nextIndex falls inside the range the leader has already discarded. AppendEntries cannot help it at that point: the entries it needs are gone. The leader sends InstallSnapshot instead, and node 4 replaces its state machine wholesale. In the ledger, rows below a snapshot point become hatched rather than blank, because those entries are not lost — they have been folded into the state.",
+    },
+    spec: scenario({
+      seed: 3,
+      nodeCount: 5,
+      network: SCRIPTED_NETWORK,
+      // Aggressive on purpose: a realistic threshold would be thousands of entries,
+      // and nothing would be visible in a run short enough to watch.
+      snapshotThreshold: 2,
+      actions: [
+        { at: 600, kind: 'client-request', node: 0, command: 'set a=1' },
+        // Node 4 is cut off while the rest of the cluster keeps committing.
+        { at: 900, kind: 'partition', partitionOf: [0, 0, 0, 0, 1] },
+        { at: 1300, kind: 'client-request', node: 0, command: 'set b=2' },
+        { at: 1700, kind: 'client-request', node: 0, command: 'set c=3' },
+        { at: 2100, kind: 'client-request', node: 0, command: 'set d=4' },
+        { at: 2500, kind: 'client-request', node: 0, command: 'set e=5' },
+        { at: 2900, kind: 'client-request', node: 0, command: 'set f=6' },
+        { at: 3600, kind: 'heal' },
+        { at: 4600, kind: 'client-request', node: 0, command: 'set g=7' },
+      ],
+      maxTime: 7000,
+      maxSteps: 6000,
+    }),
+  },
+
+  {
     id: 'log-matching-break',
     title: 'Consistency check dimatikan',
     summary:

@@ -53,11 +53,19 @@ export function applyCommitted(state: NodeState): {
   state: NodeState
   applied: readonly AppliedEntry[]
 } {
-  if (state.commitIndex <= state.lastApplied) return { state, applied: [] }
+  // §7 — an entry at or below the snapshot point was applied before it could be
+  // discarded, so it is applied by definition and there is nothing left to apply it
+  // *from*. This floor is what stops a server from walking into its own discarded
+  // range; it matters whenever `lastApplied` lags the snapshot, which a delayed
+  // InstallSnapshot can produce.
+  const floor = Math.max(state.lastApplied, state.log.lastIncludedIndex)
+  if (state.commitIndex <= floor) {
+    return floor === state.lastApplied ? { state, applied: [] } : { state: { ...state, lastApplied: floor }, applied: [] }
+  }
 
   const stateMachine = [...state.stateMachine]
   const applied: AppliedEntry[] = []
-  let lastApplied = state.lastApplied
+  let lastApplied = floor
 
   while (lastApplied < state.commitIndex) {
     lastApplied += 1

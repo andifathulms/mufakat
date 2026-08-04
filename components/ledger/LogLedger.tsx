@@ -126,15 +126,14 @@ function Cell({
     // summarised and bound, so this is hatched rather than empty.
     return (
       <td
-        className="border-b border-l border-ink-rule bg-stock-deep px-2 py-1"
+        className="compacted border-b border-l border-ink-rule px-2 py-1"
         title={`${dict.ledger.index} ${index} — ${dict.ledger.compacted}`}
       >
         <span className="sr-only">
           {dict.ledger.index} {index}, {dict.ledger.compacted}
         </span>
-        <span aria-hidden className="block text-center text-[10px] text-ink-faint">
-          ⌷
-        </span>
+        {/* Height only: the hatch is the content. */}
+        <span aria-hidden className="block h-4" />
       </td>
     )
   }
@@ -202,6 +201,10 @@ function Legend({ dict }: { dict: Dictionary }) {
       <li className="flex items-center gap-1.5">
         <span className="text-committed">✓</span>
         {dict.ledger.applied}
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span className="compacted inline-block h-4 w-5 border border-ink-rule" />
+        {dict.ledger.compacted}
       </li>
     </ul>
   )

@@ -35,6 +35,7 @@ const CONFIG: RaftConfig = {
   electionTimeoutMax: 300,
   heartbeatInterval: 50,
   flags: UNMODIFIED_RAFT,
+  snapshotThreshold: 0,
 }
 
 const S1 = 0

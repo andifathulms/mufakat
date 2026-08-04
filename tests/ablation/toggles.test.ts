@@ -213,6 +213,37 @@ describe('scenario phenomena actually occur', () => {
     expect(trace.violations).toEqual([])
   })
 
+  it('log-compaction: the lagging follower is caught up by a snapshot, not by entries', () => {
+    const trace = run(scenarioById('log-compaction'))
+    expect(trace.violations).toEqual([])
+
+    // Servers actually discarded entries.
+    const last = trace.steps[trace.steps.length - 1]
+    expect(last?.nodes.every((node) => node.log.lastIncludedIndex > 0)).toBe(true)
+
+    // And the lagging follower was caught up by InstallSnapshot, which is the whole
+    // point: at that moment AppendEntries could not have worked.
+    const installs = trace.steps.filter(
+      (step) => step.event.kind === 'deliver' && step.event.message.type === 'InstallSnapshot',
+    )
+    expect(installs.length).toBeGreaterThan(0)
+    const toLagger = installs.filter(
+      (step) => step.event.kind === 'deliver' && step.event.message.to === 4,
+    )
+    expect(toLagger.length).toBeGreaterThan(0)
+
+    // Everyone converges, and no server ever discarded past what it had applied.
+    for (const step of trace.steps) {
+      for (const node of step.nodes) {
+        expect(node.log.lastIncludedIndex).toBeLessThanOrEqual(node.lastApplied)
+      }
+    }
+    const reference = last?.nodes[0]?.stateMachine.slice(0, last.nodes[0]?.lastApplied)
+    for (const node of last?.nodes ?? []) {
+      expect(node.stateMachine.slice(0, node.lastApplied)).toEqual(reference)
+    }
+  })
+
   it('log-matching-break: the divergent index is repaired, not papered over', () => {
     const spec = scenarioById('log-matching-break')
     // The opening position must itself be legal — a hand-built start that already

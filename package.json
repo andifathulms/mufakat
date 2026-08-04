@@ -14,6 +14,7 @@
     "test:figure8": "vitest run tests/figure8",
     "test:determinism": "vitest run tests/determinism",
     "test:figure2": "vitest run tests/figure2",
+    "test:figure13": "vitest run tests/figure13",
     "typecheck": "tsc --noEmit",
     "lint": "next lint"
   },

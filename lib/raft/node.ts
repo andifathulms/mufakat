@@ -17,6 +17,9 @@ import {
   broadcastAppendEntries,
   handleAppendEntries,
   handleAppendEntriesResponse,
+  handleInstallSnapshot,
+  handleInstallSnapshotResponse,
+  maybeSnapshot,
   type Transition,
 } from './replication'
 import { applyCommitted } from './commit'
@@ -122,8 +125,14 @@ function restart(state: NodeState, config: RaftConfig): Transition {
     ...state,
     role: 'follower',
     votedFor: persistVotedForAcrossRestart(config.flags) ? state.votedFor : null,
-    commitIndex: 0,
-    lastApplied: 0,
+    // Figure 2 says `commitIndex` and `lastApplied` are volatile and initialised to 0.
+    // §7 changes that, and the figure does not say so: the *snapshot* is persistent, so
+    // a restarting server reloads a state machine that already reflects everything
+    // through `lastIncludedIndex`. Starting these at 0 would claim the server had
+    // applied nothing while its state machine says otherwise, and it would then try to
+    // re-apply entries it has legitimately discarded.
+    commitIndex: state.log.lastIncludedIndex,
+    lastApplied: state.log.lastIncludedIndex,
     nextIndex: new Array<number>(config.nodeCount).fill(lastLogIndex(state.log) + 1),
     matchIndex: new Array<number>(config.nodeCount).fill(0),
     votesGranted: new Array<boolean>(config.nodeCount).fill(false),
@@ -145,6 +154,10 @@ function dispatch(state: NodeState, message: Message, config: RaftConfig): Trans
       return handleAppendEntries(state, message, config)
     case 'AppendEntriesResponse':
       return handleAppendEntriesResponse(state, message, config)
+    case 'InstallSnapshot':
+      return handleInstallSnapshot(state, message, config)
+    case 'InstallSnapshotResponse':
+      return handleInstallSnapshotResponse(state, message)
     default: {
       // A new message type must surface every handler that has to deal with it.
       const unreachable: never = message
@@ -228,5 +241,8 @@ export function step(state: NodeState, input: Input, config: RaftConfig): StepRe
   // input, because commitIndex can advance on any of them.
   const settled = applyCommitted(node)
   const applied: readonly AppliedEntry[] = settled.applied
-  return { state: settled.state, outbox, timers, applied }
+  // §7 — and only then may the server discard what it has applied. Snapshotting
+  // *after* applying is not an ordering preference: the other way round would let a
+  // server discard an entry it had not yet put into its state machine.
+  return { state: maybeSnapshot(settled.state, config), outbox, timers, applied }
 }

@@ -43,6 +43,9 @@ jobs:
       - name: Figure 2 conformance
         run: pnpm test:figure2
 
+      - name: Figure 13 conformance (log compaction)
+        run: pnpm test:figure13
+
       - name: Determinism
         run: pnpm test:determinism
 

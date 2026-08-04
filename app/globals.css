@@ -103,6 +103,21 @@ svg :focus-visible {
   border-width: 0;
 }
 
+/*
+ * A row that has been snapshotted away (§7). In a ledger the earlier pages are not
+ * blank — they are ruled through and carried forward as a balance. Drawn as a hatch
+ * rather than a glyph so it cannot land on a missing character in the mono face.
+ */
+.compacted {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    theme('colors.ink.rule') 0,
+    theme('colors.ink.rule') 1px,
+    transparent 1px,
+    transparent 6px
+  );
+}
+
 /* A skip link: hidden until focused, then the first thing a keyboard user meets. */
 .skip-link {
   position: absolute;

@@ -32,6 +32,7 @@ pnpm test:run               # vitest once — before every commit
 pnpm test:fuzz              # randomized scenarios vs the five safety properties (slow)
 pnpm test:ablation          # each toggle must break its named property
 pnpm test:figure8           # exact reproduction of the paper's Figure 8
+pnpm test:figure13          # InstallSnapshot and log compaction, §7
 pnpm test:determinism       # byte-identical trace replay
 pnpm typecheck
 pnpm lint
@@ -73,6 +74,7 @@ workers/
   sim.worker.ts
 tests/
   figure2/                  # per-rule conformance fixtures
+  figure13/                 # InstallSnapshot and compaction, §7
   figure8/
   fuzz/
   ablation/
@@ -154,12 +156,14 @@ RaftScope and the Raft paper are linked prominently and warmly — RaftScope was
 
 ## Current state
 
-M0–M6 built. `pnpm test:run` is green: 134 tests, including 49 Figure 2 conformance
-fixtures, the panel-by-panel Figure 8 reproduction in both directions, both directions
-of all six ablation toggles, and the fuzz suite.
+M0–M6 built, plus the log-compaction half of M7. `pnpm test:run` is green: 161 tests,
+including 49 Figure 2 conformance fixtures, 23 Figure 13 fixtures, the panel-by-panel
+Figure 8 reproduction in both directions, both directions of all six ablation toggles,
+and the fuzz suite.
 
 All five safety properties hold across **10,000 randomized runs** under unmodified
-Raft. The static export builds and has been verified under the production `basePath`.
+Raft, with compaction enabled on most of them. The static export builds and has been
+verified under the production `basePath`.
 
 Every scenario is now hand-built. `initialNodes` is what made the last two possible:
 `log-matching-break` and `double-candidacy` both hinge on a starting position that is
@@ -175,10 +179,30 @@ fill and is set at large-text size, because dark ink on the follower slate tops 
 `sr-only` cell descriptions in the ledger, a polite live region for violations, and an
 `aria-valuetext` on the scrubber that says what happened rather than a step number.
 
+**Log compaction (§7, Figure 13) is in.** Half of M7. `NodeState.log` is now a bundle
+of the held entries and the snapshot point beneath them, because the offset between the
+paper's indices and the array is no longer the constant 1 — nothing outside `log.ts`
+may index it. Compaction is **off by default** (`snapshotThreshold: 0`), so every
+scenario and fixture written before §7 produces exactly the trace it produced then.
+
+Chunking (`offset`, `data[]`, `done`) is deliberately not modelled: there are no bytes
+here, and always sending `offset: 0, done: true` would be a fiction dressed as
+conformance. That omission is stated on the type rather than hidden.
+
+The fuzz suite draws a compaction threshold, and asserts §7 is genuinely exercised —
+snapshots transferred, and both Figure 13 receiver rules taken — so a compaction bug
+cannot hide behind a suite where servers never discard anything.
+
 Not done, and deliberately so:
 
-- **M7 is untouched.** No membership changes, no log compaction. §4 of the PRD is
-  binding, and both would double the state space and every fixture at once.
+- **Membership changes are untouched.** The other half of M7. Joint consensus makes
+  cluster size dynamic, so majority arithmetic, the checker's notion of a quorum, the
+  scenario schema and every fixture change together.
+- **Snapshotting has no ablation toggle**, and should not get one by default. Figure
+  13's rule 6 versus rule 7 is a liveness and efficiency distinction, not a safety one:
+  discarding a suffix you could have kept costs a round trip, not a guarantee. A toggle
+  that cannot break a named property would be exactly the cosmetic switch invariant 6
+  forbids.
 - **The exact Figure 8 lives in `tests/figure8`, driven by a director** that replaces
   only the network, and hits the paper's terms 2/3/4/5 precisely. The playable
   `figure-8` scenario reproduces the same shape in the full simulator but takes an

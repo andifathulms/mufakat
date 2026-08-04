@@ -55,17 +55,32 @@ const ABLATION_WITNESSES: readonly {
   { seed: 6026, flag: 'currentTermCommitRule', property: 'state-machine-safety' },
 ]
 
+/**
+ * These seeds were found before §7 existed, when the generator did not draw a
+ * compaction threshold. Pinning the threshold keeps them describing the scenarios they
+ * were chosen for — and, because the generator only advances the random stream when it
+ * has to draw, pinning it also restores the exact stream those seeds were found under.
+ *
+ * This is not papering over the guard. The guard fired correctly when the generator
+ * changed; what it was telling us is that these witnesses are about ablation, not about
+ * compaction, and they should say which world they live in.
+ */
+const WITNESS_OPTIONS = { snapshotThreshold: 0 } as const
+
 describe('ablation witness seeds', () => {
   for (const witness of ABLATION_WITNESSES) {
     it(`seed ${witness.seed} breaks ${witness.property} with ${witness.flag} off`, () => {
       const broken = run(
-        fuzzScenario(witness.seed, { flags: { ...UNMODIFIED_RAFT, [witness.flag]: false } }),
+        fuzzScenario(witness.seed, {
+          ...WITNESS_OPTIONS,
+          flags: { ...UNMODIFIED_RAFT, [witness.flag]: false },
+        }),
       )
       expect(broken.violations.some((v) => v.property === witness.property)).toBe(true)
     })
 
     it(`seed ${witness.seed} breaks nothing with ${witness.flag} on`, () => {
-      expect(run(fuzzScenario(witness.seed)).violations).toEqual([])
+      expect(run(fuzzScenario(witness.seed, WITNESS_OPTIONS)).violations).toEqual([])
     })
   }
 })

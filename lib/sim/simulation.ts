@@ -46,6 +46,8 @@ export interface Scenario {
   readonly electionTimeoutMax: number
   readonly heartbeatInterval: number
   readonly flags: AblationFlags
+  /** §7 — applied entries above the snapshot point before a server compacts. 0 = off. */
+  readonly snapshotThreshold: number
   readonly actions: readonly Action[]
   /** Event budget. Bounded runs keep fuzzing and trace memory finite. */
   readonly maxSteps: number
@@ -72,6 +74,9 @@ export const DEFAULT_SCENARIO: Omit<Scenario, 'seed'> = {
   electionTimeoutMax: 300,
   heartbeatInterval: 50,
   flags: UNMODIFIED_RAFT,
+  // Compaction off by default: every scenario and fixture written before §7 existed
+  // must keep producing exactly the trace it produced then.
+  snapshotThreshold: 0,
   actions: [],
   maxSteps: 4000,
   maxTime: 40_000,
@@ -95,6 +100,7 @@ function toRaftConfig(spec: Scenario): RaftConfig {
     electionTimeoutMax: spec.electionTimeoutMax,
     heartbeatInterval: spec.heartbeatInterval,
     flags: spec.flags,
+    snapshotThreshold: spec.snapshotThreshold,
   }
 }
 

@@ -9,6 +9,7 @@ export const TEST_CONFIG: RaftConfig = {
   electionTimeoutMax: 300,
   heartbeatInterval: 50,
   flags: UNMODIFIED_RAFT,
+  snapshotThreshold: 0,
 }
 
 export function configWith(overrides: Partial<RaftConfig>): RaftConfig {

@@ -70,6 +70,10 @@ function slipLabel(flight: InFlight): string {
       return flight.message.entries.length === 0 ? 'HB' : `AE·${flight.message.entries.length}`
     case 'AppendEntriesResponse':
       return flight.message.success ? 'AE✓' : 'AE✗'
+    case 'InstallSnapshot':
+      return `IS@${flight.message.lastIncludedIndex}`
+    case 'InstallSnapshotResponse':
+      return 'IS✓'
     default: {
       const unreachable: never = flight.message
       throw new Error(`Unhandled message: ${JSON.stringify(unreachable)}`)

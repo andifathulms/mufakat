@@ -40,6 +40,7 @@ pnpm test:run       # full suite, once
 pnpm test:fuzz      # randomized scenarios vs the five safety properties
 pnpm test:ablation  # each toggle must break its named property
 pnpm test:figure8   # exact reproduction of the paper's Figure 8
+pnpm test:figure13  # InstallSnapshot and log compaction (section 7)
 pnpm test:determinism
 pnpm typecheck
 ```
@@ -56,7 +57,8 @@ config + seed + actions + ablation flags
 ```
 
 - `lib/sim` — virtual clock, seeded PRNG, network model, trace. Pure.
-- `lib/raft` — the algorithm. Pure. Figure 2, literally.
+- `lib/raft` — the algorithm. Pure. Figure 2 literally, plus §7 log compaction and
+  Figure 13's InstallSnapshot. Compaction is off unless a scenario asks for it.
 - `lib/invariants` — the five safety properties, evaluated from their definitions.
   Independent of `lib/raft`; imports only types. A checker sharing the implementation's
   assumptions would validate its own bugs.

@@ -74,11 +74,53 @@ export interface AppendEntriesResponse {
   readonly matchIndex: number
 }
 
+/**
+ * Figure 13, InstallSnapshot RPC, Arguments.
+ *
+ * **Chunking is deliberately not modelled.** The figure carries `offset`, `data[]` and
+ * `done` so that a snapshot too large for one message can be sent in pieces. That is
+ * an engineering concern about bytes on a wire, and this simulator has no bytes: a
+ * snapshot here is the state machine's contents, transferred whole. Including the
+ * fields and always setting `offset: 0, done: true` would be a fiction dressed as
+ * conformance, so they are omitted and their absence is stated instead.
+ *
+ * What *is* modelled is the part that matters for understanding: a follower so far
+ * behind that the leader has already discarded the entries it needs cannot be caught
+ * up by AppendEntries at all, and receives the state itself instead.
+ */
+export interface InstallSnapshotRequest {
+  readonly type: 'InstallSnapshot'
+  readonly from: NodeId
+  readonly to: NodeId
+  readonly term: number
+  readonly leaderId: NodeId
+  readonly lastIncludedIndex: number
+  readonly lastIncludedTerm: number
+  /** The state machine's contents through `lastIncludedIndex`, by 1-based index. */
+  readonly data: readonly (string | undefined)[]
+}
+
+/** Figure 13, InstallSnapshot RPC, Results — plus the acknowledged index. */
+export interface InstallSnapshotResponse {
+  readonly type: 'InstallSnapshotResponse'
+  readonly from: NodeId
+  readonly to: NodeId
+  readonly term: number
+  /**
+   * The snapshot index the follower installed. Figure 13 returns only `term`, leaving
+   * the leader to infer what was acknowledged — which, as with AppendEntries, is
+   * wrong under a reordering network. The follower states it.
+   */
+  readonly lastIncludedIndex: number
+}
+
 export type Message =
   | RequestVoteRequest
   | RequestVoteResponse
   | AppendEntriesRequest
   | AppendEntriesResponse
+  | InstallSnapshotRequest
+  | InstallSnapshotResponse
 
 export type MessageType = Message['type']
 
@@ -167,6 +209,16 @@ export interface RaftConfig {
   readonly electionTimeoutMax: number
   readonly heartbeatInterval: number
   readonly flags: AblationFlags
+  /**
+   * §7 — a server snapshots once it holds this many applied entries above its current
+   * snapshot point. 0 disables compaction entirely, which is the default: every
+   * scenario and fixture written before §7 existed must keep producing exactly the
+   * trace it produced then.
+   *
+   * Each server decides independently, which is the paper's design: "each server takes
+   * snapshots independently, covering just the committed entries in its own log."
+   */
+  readonly snapshotThreshold: number
 }
 
 /** A majority of the cluster. Integer arithmetic: 3 -> 2, 4 -> 3, 5 -> 3. */
