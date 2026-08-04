@@ -62,36 +62,34 @@ export function canReach(state: NetworkState, from: number, to: number): boolean
   return state.partitionOf[from] === state.partitionOf[to]
 }
 
-/** Why a message did not arrive, or how many copies did. */
+/** What the wire does to a message. A lost message still spent time in transit. */
 export type Delivery =
-  | { readonly kind: 'partitioned' }
-  | { readonly kind: 'dropped' }
+  | { readonly kind: 'dropped'; readonly delay: number }
   /** One or two copies; `delays` is in the order the copies were drawn, not arrival order. */
   | { readonly kind: 'delivered'; readonly delays: readonly number[] }
 
 /**
- * Decide the fate of one message. The PRNG is drawn in a fixed order — partition
- * check, drop, latency, duplication — so the stream stays aligned across runs.
+ * Decide the fate of one message. Draws are made in a fixed order — latency, drop,
+ * duplication — so the stream stays aligned across runs.
+ *
+ * Partitions are deliberately *not* consulted here. Reachability is checked at
+ * delivery time instead, which models a partition as a severed link that swallows
+ * whatever was already on it, and — more importantly — keeps the random stream
+ * independent of the topology. Drawing or healing a partition mid-run therefore does
+ * not shift the latency of every other message in the simulation, which it would if
+ * the topology decided how many numbers were consumed.
  */
 export function route(
   prng: Prng,
   config: NetworkConfig,
-  state: NetworkState,
-  from: number,
-  to: number,
 ): { prng: Prng; delivery: Delivery } {
-  if (!canReach(state, from, to)) {
-    // Costs no PRNG draws: a partition is a fact about the topology, not a dice roll.
-    return { prng, delivery: { kind: 'partitioned' } }
-  }
-
-  const dropped = nextChance(prng, config.dropPerMille)
+  const latency = nextInt(prng, config.latencyMin, config.latencyMax)
+  const dropped = nextChance(latency.prng, config.dropPerMille)
   if (dropped.value) {
-    return { prng: dropped.prng, delivery: { kind: 'dropped' } }
+    return { prng: dropped.prng, delivery: { kind: 'dropped', delay: latency.value } }
   }
 
-  const latency = nextInt(dropped.prng, config.latencyMin, config.latencyMax)
-  const duplicated = nextChance(latency.prng, config.duplicatePerMille)
+  const duplicated = nextChance(dropped.prng, config.duplicatePerMille)
   if (!duplicated.value) {
     return { prng: duplicated.prng, delivery: { kind: 'delivered', delays: [latency.value] } }
   }

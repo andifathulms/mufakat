@@ -12,11 +12,10 @@ import {
 import { prngFromSeed } from '@/lib/sim/prng'
 
 function routeMany(seed: number, count: number): Delivery[] {
-  const state = fullyConnected(5)
   let prng = prngFromSeed(seed)
   const out: Delivery[] = []
   for (let i = 0; i < count; i += 1) {
-    const routed = route(prng, DEFAULT_NETWORK, state, i % 5, (i + 1) % 5)
+    const routed = route(prng, DEFAULT_NETWORK)
     prng = routed.prng
     out.push(routed.delivery)
   }
@@ -47,10 +46,10 @@ describe('network', () => {
     expect(overtaking.length).toBeGreaterThan(0)
   })
 
-  it('produces integer latencies inside the configured range', () => {
+  it('produces integer latencies inside the configured range, lost messages included', () => {
     for (const delivery of routeMany(11, 2000)) {
-      if (delivery.kind !== 'delivered') continue
-      for (const delay of delivery.delays) {
+      const delays = delivery.kind === 'delivered' ? delivery.delays : [delivery.delay]
+      for (const delay of delays) {
         expect(Number.isInteger(delay)).toBe(true)
         expect(delay).toBeGreaterThanOrEqual(DEFAULT_NETWORK.latencyMin)
         expect(delay).toBeLessThanOrEqual(DEFAULT_NETWORK.latencyMax)
@@ -59,13 +58,11 @@ describe('network', () => {
   })
 
   it('allows reordering on a link when latency varies more than the send gap', () => {
-    // Two sends a tick apart can still arrive out of order.
-    const state = fullyConnected(3)
     let prng = prngFromSeed(4242)
     let reorders = 0
     for (let i = 0; i < 2000; i += 1) {
-      const first = route(prng, DEFAULT_NETWORK, state, 0, 1)
-      const second = route(first.prng, DEFAULT_NETWORK, state, 0, 1)
+      const first = route(prng, DEFAULT_NETWORK)
+      const second = route(first.prng, DEFAULT_NETWORK)
       prng = second.prng
       if (first.delivery.kind !== 'delivered' || second.delivery.kind !== 'delivered') continue
       const firstArrival = 0 + (first.delivery.delays[0] ?? 0)
@@ -75,15 +72,18 @@ describe('network', () => {
     expect(reorders).toBeGreaterThan(0)
   })
 
-  it('blocks messages across a partition without consuming randomness', () => {
+  it('keeps the random stream independent of the topology', () => {
+    // Routing draws the same numbers whatever the partitions are, so drawing or
+    // healing a partition mid-run does not shift every later message in the run.
+    const prng = prngFromSeed(1)
+    expect(route(prng, DEFAULT_NETWORK).prng).toBe(route(prng, DEFAULT_NETWORK).prng)
+  })
+
+  it('blocks reachability across a partition', () => {
     const split = assignPartition(fullyConnected(5), 4, 1)
     expect(canReach(split, 0, 1)).toBe(true)
     expect(canReach(split, 0, 4)).toBe(false)
-    const prng = prngFromSeed(1)
-    const routed = route(prng, DEFAULT_NETWORK, split, 0, 4)
-    expect(routed.delivery.kind).toBe('partitioned')
-    // A partition is topology, not a dice roll: the stream must not advance.
-    expect(routed.prng).toBe(prng)
+    expect(canReach(split, 4, 4)).toBe(true)
   })
 
   it('heals partitions back to full connectivity', () => {
@@ -97,10 +97,9 @@ describe('network', () => {
   })
 
   it('never drops on the reliable network used by conformance fixtures', () => {
-    const state = fullyConnected(3)
     let prng = prngFromSeed(8)
     for (let i = 0; i < 1000; i += 1) {
-      const routed = route(prng, RELIABLE_NETWORK, state, 0, 1)
+      const routed = route(prng, RELIABLE_NETWORK)
       prng = routed.prng
       expect(routed.delivery.kind).toBe('delivered')
       if (routed.delivery.kind === 'delivered') expect(routed.delivery.delays).toHaveLength(1)

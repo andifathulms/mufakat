@@ -14,13 +14,10 @@
  * visibly, everywhere it can be seen or shared.
  */
 
-/** The five safety properties, as stated in §5.4.3 of the paper. */
-export type SafetyProperty =
-  | 'election-safety'
-  | 'leader-append-only'
-  | 'log-matching'
-  | 'leader-completeness'
-  | 'state-machine-safety'
+// The five properties are defined by the checker, not by the algorithm. The
+// dependency points this way on purpose: `lib/invariants` imports nothing at all,
+// so it cannot inherit an assumption from the implementation it is checking.
+import type { SafetyProperty } from '@/lib/invariants/types'
 
 export interface AblationFlags {
   /**
