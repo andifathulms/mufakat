@@ -74,6 +74,7 @@ interface Dictionary {
     readonly uncommitted: string
     readonly empty: string
     readonly legend: string
+    readonly compacted: string
   }
   readonly invariants: {
     readonly holding: string
@@ -173,6 +174,7 @@ const id: Dictionary = {
     applied: 'Applied',
     uncommitted: 'Belum committed',
     empty: 'Log kosong',
+    compacted: 'sudah di-snapshot (§7)',
     legend:
       'Baris disejajarkan pada index. Log yang menyimpang terbaca sebagai garis yang patah.',
   },
@@ -308,6 +310,7 @@ const en: Dictionary = {
     applied: 'Applied',
     uncommitted: 'Uncommitted',
     empty: 'Empty log',
+    compacted: 'snapshotted away (§7)',
     legend: 'Rows align on index. A divergent log reads as a broken line.',
   },
   invariants: {

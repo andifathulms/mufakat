@@ -66,7 +66,8 @@ export function applyCommitted(state: NodeState): {
       // commitIndex ahead of the log means the node committed something it does not
       // hold. That is not a recoverable condition; it is a bug in the algorithm.
       throw new Error(
-        `Node ${state.id}: commitIndex ${state.commitIndex} exceeds log length ${state.log.length}`,
+        `Node ${state.id}: commitIndex ${state.commitIndex} names an entry it does not hold ` +
+          `(last index ${lastLogIndex(state.log)}, snapshot through ${state.log.lastIncludedIndex})`,
       )
     }
     stateMachine[lastApplied - 1] = entry.command

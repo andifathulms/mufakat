@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { EMPTY_LOG, entryAt, heldEntries, type Log } from '@/lib/raft/log'
 import { step } from '@/lib/raft/node'
 import type { AppendEntriesRequest, AppendEntriesResponse } from '@/lib/raft/types'
-import { TEST_CONFIG, logOf, nodeWith } from '../helpers/nodes'
+import { TEST_CONFIG, entriesOf, logOf, nodeWith } from '../helpers/nodes'
 
 /** Figure 2, AppendEntries RPC — Arguments, Results, Receiver implementation. */
 
@@ -32,7 +33,7 @@ function appendResponse(result: { outbox: readonly unknown[] }): AppendEntriesRe
   return message as AppendEntriesResponse
 }
 
-const terms = (log: readonly { term: number }[]): number[] => log.map((e) => e.term)
+const terms = (log: Log): number[] => heldEntries(log).map((e) => e.term)
 
 describe('Figure 2 — AppendEntries RPC, receiver rule 1', () => {
   it('replies false if term < currentTerm (§5.1)', () => {
@@ -68,7 +69,7 @@ describe('Figure 2 — AppendEntries RPC, receiver rule 2', () => {
       follower,
       {
         type: 'message',
-        message: appendEntries({ term: 4, prevLogIndex: 3, prevLogTerm: 3, entries: logOf(4) }),
+        message: appendEntries({ term: 4, prevLogIndex: 3, prevLogTerm: 3, entries: entriesOf(4) }),
       },
       TEST_CONFIG,
     )
@@ -78,10 +79,10 @@ describe('Figure 2 — AppendEntries RPC, receiver rule 2', () => {
   })
 
   it('accepts at prevLogIndex 0, which every log matches', () => {
-    const follower = nodeWith({ currentTerm: 2, log: [] })
+    const follower = nodeWith({ currentTerm: 2, log: EMPTY_LOG })
     const result = step(
       follower,
-      { type: 'message', message: appendEntries({ entries: logOf(2, 2) }) },
+      { type: 'message', message: appendEntries({ entries: entriesOf(2, 2) }) },
       TEST_CONFIG,
     )
     expect(appendResponse(result).success).toBe(true)
@@ -96,7 +97,7 @@ describe('Figure 2 — AppendEntries RPC, receiver rules 3 and 4', () => {
       follower,
       {
         type: 'message',
-        message: appendEntries({ term: 6, prevLogIndex: 2, prevLogTerm: 2, entries: logOf(6) }),
+        message: appendEntries({ term: 6, prevLogIndex: 2, prevLogTerm: 2, entries: entriesOf(6) }),
       },
       TEST_CONFIG,
     )
@@ -110,7 +111,7 @@ describe('Figure 2 — AppendEntries RPC, receiver rules 3 and 4', () => {
       follower,
       {
         type: 'message',
-        message: appendEntries({ term: 3, prevLogIndex: 2, prevLogTerm: 1, entries: logOf(3, 3) }),
+        message: appendEntries({ term: 3, prevLogIndex: 2, prevLogTerm: 1, entries: entriesOf(3, 3) }),
       },
       TEST_CONFIG,
     )
@@ -126,7 +127,7 @@ describe('Figure 2 — AppendEntries RPC, receiver rules 3 and 4', () => {
       follower,
       {
         type: 'message',
-        message: appendEntries({ term: 3, prevLogIndex: 1, prevLogTerm: 1, entries: logOf(3) }),
+        message: appendEntries({ term: 3, prevLogIndex: 1, prevLogTerm: 1, entries: entriesOf(3) }),
       },
       TEST_CONFIG,
     )
@@ -144,7 +145,7 @@ describe('Figure 2 — AppendEntries RPC, receiver rules 3 and 4', () => {
           term: 5,
           prevLogIndex: 1,
           prevLogTerm: 1,
-          entries: logOf(2, 2, 5, 5),
+          entries: entriesOf(2, 2, 5, 5),
         }),
       },
       TEST_CONFIG,
@@ -164,7 +165,7 @@ describe('Figure 2 — AppendEntries RPC, receiver rule 5', () => {
           term: 3,
           prevLogIndex: 1,
           prevLogTerm: 1,
-          entries: logOf(3, 3),
+          entries: entriesOf(3, 3),
           leaderCommit: 9,
         }),
       },
@@ -184,7 +185,7 @@ describe('Figure 2 — AppendEntries RPC, receiver rule 5', () => {
           term: 3,
           prevLogIndex: 1,
           prevLogTerm: 1,
-          entries: logOf(3, 3),
+          entries: entriesOf(3, 3),
           leaderCommit: 2,
         }),
       },
@@ -272,13 +273,13 @@ describe('Figure 2 — Leaders rules', () => {
     const leader = nodeWith({ role: 'leader', currentTerm: 4, log: logOf(1, 2) })
     const result = step(leader, { type: 'client-request', command: 'set x=1' }, TEST_CONFIG)
     expect(terms(result.state.log)).toEqual([1, 2, 4])
-    expect(result.state.log[2]?.command).toBe('set x=1')
+    expect(entryAt(result.state.log, 3)?.command).toBe('set x=1')
   })
 
   it('rule 2: a non-leader does not append a client command', () => {
     const follower = nodeWith({ role: 'follower', currentTerm: 4 })
     const result = step(follower, { type: 'client-request', command: 'set x=1' }, TEST_CONFIG)
-    expect(result.state.log).toHaveLength(0)
+    expect(heldEntries(result.state.log)).toHaveLength(0)
     expect(result.outbox).toHaveLength(0)
   })
 
@@ -300,7 +301,7 @@ describe('Figure 2 — Leaders rules', () => {
     if (toOne?.type !== 'AppendEntries') throw new Error('unreachable')
     expect(toOne.prevLogIndex).toBe(2)
     expect(toOne.prevLogTerm).toBe(2)
-    expect(terms(toOne.entries)).toEqual([3, 3])
+    expect(toOne.entries.map((e) => e.term)).toEqual([3, 3])
   })
 
   it('rule 3: on success, updates nextIndex and matchIndex', () => {

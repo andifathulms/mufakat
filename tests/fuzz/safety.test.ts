@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { lastLogIndex } from '@/lib/raft/log'
 import { run } from '@/lib/sim/simulation'
 import { fuzzScenario } from '../helpers/generate'
 
@@ -46,7 +47,7 @@ describe('invariant fuzzing — unmodified Raft', () => {
       if (last.nodes.some((node) => node.commitIndex > 0)) commits += 1
       // Logs that disagree at some index at some point: repair had work to do.
       const diverged = trace.steps.some((step) => {
-        const lengths = step.nodes.map((node) => node.log.length)
+        const lengths = step.nodes.map((node) => lastLogIndex(node.log))
         return Math.max(...lengths) !== Math.min(...lengths)
       })
       if (diverged) divergences += 1

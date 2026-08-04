@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { step } from '@/lib/raft/node'
-import { isAtLeastAsUpToDate } from '@/lib/raft/log'
+import { EMPTY_LOG, isAtLeastAsUpToDate } from '@/lib/raft/log'
 import type { RequestVoteRequest, RequestVoteResponse } from '@/lib/raft/types'
 import { TEST_CONFIG, logOf, nodeWith } from '../helpers/nodes'
 
@@ -121,9 +121,9 @@ describe('§5.4.1 — "at least as up-to-date" compares last term, then index', 
   })
 
   it('treats an empty log as term 0, index 0', () => {
-    expect(isAtLeastAsUpToDate(0, 0, [])).toBe(true)
+    expect(isAtLeastAsUpToDate(0, 0, EMPTY_LOG)).toBe(true)
     expect(isAtLeastAsUpToDate(0, 0, logOf(1))).toBe(false)
-    expect(isAtLeastAsUpToDate(1, 1, [])).toBe(true)
+    expect(isAtLeastAsUpToDate(1, 1, EMPTY_LOG)).toBe(true)
   })
 })
 

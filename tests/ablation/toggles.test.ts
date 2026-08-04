@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { entryAt, heldEntries, lastLogIndex } from '@/lib/raft/log'
 import { SCENARIOS, ablated, scenarioForFlag } from '@/data/scenarios'
 import {
   ABLATION_FLAG_NAMES,
@@ -8,6 +9,7 @@ import {
   disabledRules,
   isModifiedRaft,
 } from '@/lib/raft/rules'
+import { logOfNode } from '../helpers/nodes'
 import { run } from '@/lib/sim/simulation'
 import { traceDigest } from '@/lib/sim/trace'
 
@@ -158,8 +160,8 @@ describe('scenario phenomena actually occur', () => {
   it('log-divergence-repair: logs diverge at an index and are then repaired', () => {
     const trace = run(scenarioById('log-divergence-repair'))
     const diverged = trace.steps.some((step) => {
-      const first = step.nodes[0]?.log
-      const third = step.nodes[2]?.log
+      const first = heldEntries(logOfNode(step.nodes[0]))
+      const third = heldEntries(logOfNode(step.nodes[2]))
       if (first === undefined || third === undefined) return false
       return first.some((entry, i) => {
         const other = third[i]
@@ -170,9 +172,9 @@ describe('scenario phenomena actually occur', () => {
 
     // And afterwards every server agrees, entry for entry.
     const last = trace.steps[trace.steps.length - 1]
-    const reference = last?.nodes[2]?.log.map((entry) => `${entry.term}:${entry.command}`)
+    const reference = heldEntries(logOfNode(last?.nodes[2])).map((entry) => `${entry.term}:${entry.command}`)
     for (const node of last?.nodes ?? []) {
-      expect(node.log.map((entry) => `${entry.term}:${entry.command}`)).toEqual(reference)
+      expect(heldEntries(node.log).map((entry) => `${entry.term}:${entry.command}`)).toEqual(reference)
     }
   })
 
@@ -182,7 +184,7 @@ describe('scenario phenomena actually occur', () => {
     const isolated = beforeHeal?.nodes[4]
     const connected = beforeHeal?.nodes[0]
     expect(isolated?.currentTerm ?? 0).toBeGreaterThan((connected?.currentTerm ?? 0) + 3)
-    expect(isolated?.log.length ?? 99).toBeLessThan(connected?.log.length ?? 0)
+    expect(lastLogIndex(logOfNode(isolated)) ?? 99).toBeLessThan(lastLogIndex(logOfNode(connected)) ?? 0)
     // The restriction is the only thing stopping it winning, so with it on nothing
     // committed is ever lost.
     expect(trace.violations).toEqual([])
@@ -194,7 +196,7 @@ describe('scenario phenomena actually occur', () => {
     // Panel (c): a majority holds index 2 with term 2 — and the leader of term 4 has
     // not committed it.
     const panelC = trace.steps.filter((step) => step.time < 3000).at(-1)
-    const holders = panelC?.nodes.filter((node) => node.log[1]?.term === 2).length ?? 0
+    const holders = panelC?.nodes.filter((node) => entryAt(node.log, 2)?.term === 2).length ?? 0
     expect(holders).toBeGreaterThanOrEqual(3)
     const leaderC = panelC?.nodes.find((node) => node.role === 'leader')
     expect(leaderC?.currentTerm).toBe(4)
@@ -204,7 +206,7 @@ describe('scenario phenomena actually occur', () => {
     const last = trace.steps[trace.steps.length - 1]
     const live = last?.nodes.filter((node, id) => last.crashed[id] !== true) ?? []
     expect(live.length).toBeGreaterThan(2)
-    for (const node of live) expect(node.log[1]?.term).toBe(3)
+    for (const node of live) expect(entryAt(node.log, 2)?.term).toBe(3)
 
     // And under unmodified Raft, losing it costs nothing, because it was never
     // committed. That is the entire argument of the figure.
@@ -222,18 +224,18 @@ describe('scenario phenomena actually occur', () => {
     expect(trace.violations).toEqual([])
     const last = trace.steps[trace.steps.length - 1]
     // Node 4 began with a term-3 entry at index 3 and ends agreeing with everyone.
-    expect(trace.steps[0]?.nodes[4]?.log[2]?.term).toBe(3)
-    const reference = last?.nodes[0]?.log.map((entry) => `${entry.term}:${entry.command}`)
+    expect(entryAt(logOfNode(trace.steps[0]?.nodes[4]), 3)?.term).toBe(3)
+    const reference = heldEntries(logOfNode(last?.nodes[0])).map((entry) => `${entry.term}:${entry.command}`)
     for (const node of last?.nodes ?? []) {
-      expect(node.log.map((entry) => `${entry.term}:${entry.command}`)).toEqual(reference)
+      expect(heldEntries(node.log).map((entry) => `${entry.term}:${entry.command}`)).toEqual(reference)
     }
 
     // With the check off, node 4 keeps its divergent index 3 while agreeing at index 4.
     const broken = run({ ...spec, flags: { ...UNMODIFIED_RAFT, appendEntriesConsistencyCheck: false } })
     const brokenLast = broken.steps[broken.steps.length - 1]
-    expect(brokenLast?.nodes[4]?.log[2]?.term).toBe(3)
-    expect(brokenLast?.nodes[0]?.log[2]?.term).toBe(2)
-    expect(brokenLast?.nodes[4]?.log[3]?.term).toBe(brokenLast?.nodes[0]?.log[3]?.term)
+    expect(entryAt(logOfNode(brokenLast?.nodes[4]), 3)?.term).toBe(3)
+    expect(entryAt(logOfNode(brokenLast?.nodes[0]), 3)?.term).toBe(2)
+    expect(entryAt(logOfNode(brokenLast?.nodes[4]), 4)?.term).toBe(entryAt(logOfNode(brokenLast?.nodes[0]), 4)?.term)
     expect(broken.violations.some((v) => v.property === 'log-matching')).toBe(true)
   })
 

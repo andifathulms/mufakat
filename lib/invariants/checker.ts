@@ -4,20 +4,30 @@
  * event.
  *
  * It imports nothing from `lib/raft`. Not helpers, not constants, not types. The
- * 1-based indexing, the majority arithmetic, the notion of "up-to-date" — all of it
- * is re-derived here from the property statements. A checker that reused the
+ * indexing, the majority arithmetic, the notion of "up-to-date" — all of it is
+ * re-derived here from the property statements. A checker that reused the
  * implementation's assumptions would agree with the implementation's bugs.
  *
  * Some properties are statements about *history*, not about a moment, so the checker
  * carries accumulated observations from step to step: which servers have been leader
  * in which terms, which entries have been reported committed, what has been applied
  * where. `check` is a fold: (state, snapshot) -> (state, violations).
+ *
+ * **Log compaction (§7) makes this harder, and deliberately does not make it weaker.**
+ * Once a server snapshots, it no longer holds the entries below its snapshot point, so
+ * a naive checker would lose sight of exactly the entries that are committed — the
+ * ones the properties care about most. Two things keep the checks at full strength:
+ * a server's *applied* commands are retained by index in this model and never
+ * discarded, so a prefix can still be compared below a snapshot point; and the checker
+ * has its own memory of everything it has ever seen committed, which lets it hold a
+ * server's snapshot point to the entry that was actually there.
  */
 
 import {
   EMPTY_CHECKER_STATE,
   type CheckerState,
   type ClusterSnapshot,
+  type KnownEntry,
   type NodeSnapshot,
   type SafetyProperty,
   type SnapshotEntry,
@@ -31,10 +41,43 @@ function sameEntry(a: SnapshotEntry | undefined, b: SnapshotEntry | undefined): 
   return a.term === b.term && a.command === b.command
 }
 
-/** 1-based access, re-derived here rather than imported. */
-function at(log: readonly SnapshotEntry[], index: number): SnapshotEntry | undefined {
-  if (index < 1 || index > log.length) return undefined
-  return log[index - 1]
+/**
+ * Absolute-index access into a server's held entries. A server that has compacted no
+ * longer starts at index 1, so the offset is `logStartIndex` — worked out from the
+ * snapshot rather than trusting the implementation's own arithmetic.
+ */
+function heldAt(node: NodeSnapshot, index: number): SnapshotEntry | undefined {
+  const offset = index - node.logStartIndex
+  if (offset < 0 || offset >= node.log.length) return undefined
+  return node.log[offset]
+}
+
+/** Highest index this server holds an entry for; below `logStartIndex` when empty. */
+function lastHeldIndex(node: NodeSnapshot): number {
+  return node.logStartIndex + node.log.length - 1
+}
+
+/**
+ * Everything the checker can establish about one index on one server.
+ *
+ * Below a snapshot point the term is genuinely gone, but the *command* is not: the
+ * server applied it before it was allowed to discard it. That asymmetry is what lets
+ * prefix comparison survive compaction.
+ */
+function known(node: NodeSnapshot, index: number): KnownEntry {
+  const held = heldAt(node, index)
+  if (held !== undefined) return { term: held.term, command: held.command }
+  const term = index === node.lastIncludedIndex ? node.lastIncludedTerm : undefined
+  const command = index <= node.lastIncludedIndex ? node.applied[index - 1] : undefined
+  return { term, command }
+}
+
+/** True when both servers know the command at `index` and the two differ. */
+function commandsDiffer(a: NodeSnapshot, b: NodeSnapshot, index: number): boolean {
+  const left = known(a, index).command
+  const right = known(b, index).command
+  if (left === undefined || right === undefined) return false
+  return left !== right
 }
 
 function describe(entry: SnapshotEntry): string {
@@ -91,26 +134,46 @@ function checkLeaderAppendOnly(acc: Accumulator, snapshot: ClusterSnapshot): voi
       leaderLogs[node.id] = null
       continue
     }
+    const record = (): void => {
+      leaderLogs[node.id] = {
+        term: node.currentTerm,
+        log: node.log,
+        logStartIndex: node.logStartIndex,
+        lastIndex: lastHeldIndex(node),
+      }
+    }
+
     const previous = leaderLogs[node.id] ?? null
     // A new term is a new leadership; only a continuous stint is constrained.
     if (previous === null || previous.term !== node.currentTerm) {
-      leaderLogs[node.id] = { term: node.currentTerm, log: node.log }
+      record()
       continue
     }
-    if (node.log.length < previous.log.length) {
+
+    // Compaction discards entries from the *bottom*, and only entries the server has
+    // already applied. That is not overwriting or deleting in the sense of the
+    // property, so the comparison is anchored on the last index, not on how many
+    // entries are held — which compaction legitimately reduces.
+    if (lastHeldIndex(node) < previous.lastIndex) {
       acc.violations.push({
         property: 'leader-append-only',
         stepIndex: snapshot.stepIndex,
         time: snapshot.time,
-        logIndex: node.log.length + 1,
+        logIndex: lastHeldIndex(node) + 1,
         nodes: [node.id],
         terms: [node.currentTerm],
-        summary: `Leader ${node.id} in term ${node.currentTerm} shortened its own log from ${previous.log.length} to ${node.log.length} entries.`,
+        summary:
+          `Leader ${node.id} in term ${node.currentTerm} lost the tail of its own log: ` +
+          `last index went from ${previous.lastIndex} to ${lastHeldIndex(node)}.`,
       })
     }
-    for (let index = 1; index <= Math.min(node.log.length, previous.log.length); index += 1) {
-      const before = at(previous.log, index)
-      const now = at(node.log, index)
+
+    // Compare over the overlap of what was held then and what is held now.
+    const from = Math.max(previous.logStartIndex, node.logStartIndex)
+    const to = Math.min(previous.lastIndex, lastHeldIndex(node))
+    for (let index = from; index <= to; index += 1) {
+      const before = previous.log[index - previous.logStartIndex]
+      const now = heldAt(node, index)
       if (sameEntry(before, now)) continue
       acc.violations.push({
         property: 'leader-append-only',
@@ -126,7 +189,7 @@ function checkLeaderAppendOnly(acc: Accumulator, snapshot: ClusterSnapshot): voi
       })
       break
     }
-    leaderLogs[node.id] = { term: node.currentTerm, log: node.log }
+    record()
   }
 
   acc.state = { ...acc.state, leaderLogs }
@@ -144,11 +207,25 @@ function checkLogMatching(acc: Accumulator, snapshot: ClusterSnapshot): void {
       const first = nodes[a]
       const second = nodes[b]
       if (first === undefined || second === undefined) continue
-      const shared = Math.min(first.log.length, second.log.length)
+
+      // Absolute index range where both servers can state a term. Below it neither
+      // holds entries, but their applied commands still allow a prefix comparison.
+      const from = Math.max(first.logStartIndex, second.logStartIndex)
+      const to = Math.min(lastHeldIndex(first), lastHeldIndex(second))
+
+      // Seed the prefix comparison from everything below the shared range, using the
+      // commands each server applied. Compaction therefore costs the check nothing.
       let prefixIdentical = true
-      for (let index = 1; index <= shared; index += 1) {
-        const left = at(first.log, index)
-        const right = at(second.log, index)
+      for (let index = 1; index < from; index += 1) {
+        if (commandsDiffer(first, second, index)) {
+          prefixIdentical = false
+          break
+        }
+      }
+
+      for (let index = from; index <= to; index += 1) {
+        const left = heldAt(first, index)
+        const right = heldAt(second, index)
         if (left === undefined || right === undefined) break
         if (left.term === right.term && left.command !== right.command) {
           // Same index, same term, different entry — the corollary fails outright.
@@ -187,6 +264,35 @@ function checkLogMatching(acc: Accumulator, snapshot: ClusterSnapshot): void {
 }
 
 // ---------------------------------------------------------------------------
+// Snapshot consistency (§7). Not one of the five, but the five cannot be trusted
+// without it: a server that snapshots the wrong entry quietly launders a divergent
+// log into an unfalsifiable one.
+// ---------------------------------------------------------------------------
+
+function checkSnapshotConsistency(acc: Accumulator, snapshot: ClusterSnapshot): void {
+  for (const node of snapshot.nodes) {
+    if (node.lastIncludedIndex === 0) continue
+    const record = acc.state.committed[node.lastIncludedIndex - 1]
+    if (record === undefined) continue
+
+    // A snapshot may only cover entries the server had applied, so the checker must
+    // already have seen this index committed — and with this term.
+    if (record.entry.term === node.lastIncludedTerm) continue
+    acc.violations.push({
+      property: 'log-matching',
+      stepIndex: snapshot.stepIndex,
+      time: snapshot.time,
+      logIndex: node.lastIncludedIndex,
+      nodes: [node.id],
+      terms: [record.entry.term, node.lastIncludedTerm],
+      summary:
+        `Node ${node.id} snapshotted index ${node.lastIncludedIndex} as term ` +
+        `${node.lastIncludedTerm}, but ${describe(record.entry)} was committed there.`,
+    })
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Leader Completeness — an entry committed in a term is present in the log of every
 // leader of every later term.
 // ---------------------------------------------------------------------------
@@ -198,27 +304,24 @@ function checkLeaderCompleteness(acc: Accumulator, snapshot: ClusterSnapshot): v
   // implementation's; holding it to the property is the checker's job.
   for (const node of snapshot.nodes) {
     for (let index = 1; index <= node.commitIndex; index += 1) {
-      const entry = at(node.log, index)
+      const entry = heldAt(node, index)
+      // Entries below the snapshot point were recorded when they were still held.
       if (entry === undefined) continue
-      const known = committed[index - 1]
-      if (known === undefined) {
-        committed[index - 1] = {
-          entry,
-          committedInTerm: node.currentTerm,
-          byNode: node.id,
-        }
+      const record = committed[index - 1]
+      if (record === undefined) {
+        committed[index - 1] = { entry, committedInTerm: node.currentTerm, byNode: node.id }
         continue
       }
-      if (sameEntry(known.entry, entry)) continue
+      if (sameEntry(record.entry, entry)) continue
       acc.violations.push({
         property: 'leader-completeness',
         stepIndex: snapshot.stepIndex,
         time: snapshot.time,
         logIndex: index,
-        nodes: [known.byNode, node.id].sort((x, y) => x - y),
-        terms: [known.entry.term, entry.term],
+        nodes: [record.byNode, node.id].sort((x, y) => x - y),
+        terms: [record.entry.term, entry.term],
         summary:
-          `Index ${index} was committed as ${describe(known.entry)} by node ${known.byNode}, ` +
+          `Index ${index} was committed as ${describe(record.entry)} by node ${record.byNode}, ` +
           `but node ${node.id} has committed ${describe(entry)} there.`,
       })
     }
@@ -231,8 +334,14 @@ function checkLeaderCompleteness(acc: Accumulator, snapshot: ClusterSnapshot): v
       const record = committed[index - 1]
       if (record === undefined) continue
       if (node.currentTerm <= record.committedInTerm) continue
-      const held = at(node.log, index)
+
+      const held = heldAt(node, index)
       if (sameEntry(held, record.entry)) continue
+      // A leader that has snapshotted past this index still *has* the entry — it is
+      // folded into its state machine. Compaction must not read as loss.
+      if (index <= node.lastIncludedIndex && known(node, index).command === record.entry.command) {
+        continue
+      }
       acc.violations.push({
         property: 'leader-completeness',
         stepIndex: snapshot.stepIndex,
@@ -264,21 +373,21 @@ function checkStateMachineSafety(acc: Accumulator, snapshot: ClusterSnapshot): v
     for (let index = 1; index <= node.lastApplied; index += 1) {
       const command = node.applied[index - 1]
       if (command === undefined) continue
-      const known = appliedAt[index - 1]
-      if (known === undefined) {
+      const record = appliedAt[index - 1]
+      if (record === undefined) {
         appliedAt[index - 1] = { command, byNode: node.id }
         continue
       }
-      if (known.command === command) continue
+      if (record.command === command) continue
       acc.violations.push({
         property: 'state-machine-safety',
         stepIndex: snapshot.stepIndex,
         time: snapshot.time,
         logIndex: index,
-        nodes: [known.byNode, node.id].sort((x, y) => x - y),
+        nodes: [record.byNode, node.id].sort((x, y) => x - y),
         terms: [],
         summary:
-          `Node ${known.byNode} applied "${known.command}" at index ${index}; ` +
+          `Node ${record.byNode} applied "${record.command}" at index ${index}; ` +
           `node ${node.id} applied "${command}" at the same index.`,
       })
       // Keep the first observation, so the report stays anchored to what happened
@@ -304,6 +413,9 @@ export function check(
   checkElectionSafety(acc, snapshot)
   checkLeaderAppendOnly(acc, snapshot)
   checkLogMatching(acc, snapshot)
+  // Runs before Leader Completeness records this step's commits, so a snapshot is
+  // judged against what was already known to be committed rather than against itself.
+  checkSnapshotConsistency(acc, snapshot)
   checkLeaderCompleteness(acc, snapshot)
   checkStateMachineSafety(acc, snapshot)
 

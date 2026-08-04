@@ -13,6 +13,7 @@
  * Scenario ids are stable and readable, because they appear in shared URLs.
  */
 
+import { logFrom } from '@/lib/raft/log'
 import { createNode } from '@/lib/raft/node'
 import type { AblationFlagName } from '@/lib/raft/rules'
 import { UNMODIFIED_RAFT } from '@/lib/raft/rules'
@@ -71,17 +72,17 @@ export function figure8PanelA(seed: number): readonly NodeState[] {
     ...createNode(id, 5, seed),
     currentTerm: 2,
     votedFor: 0,
-    log: [{ term: 1, command: 'a' }],
+    log: logFrom([{ term: 1, command: 'a' }]),
     commitIndex: 1,
     lastApplied: 1,
     stateMachine: ['a'],
   })
   const withIndexTwo = (id: number): NodeState => ({
     ...base(id),
-    log: [
+    log: logFrom([
       { term: 1, command: 'a' },
       { term: 2, command: 'b' },
-    ],
+    ]),
   })
   return [
     {
@@ -130,7 +131,7 @@ export function logMatchingStart(seed: number): readonly NodeState[] {
     ...createNode(id, 5, seed),
     currentTerm: 4,
     votedFor: 0,
-    log,
+    log: logFrom(log),
     commitIndex: 2,
     lastApplied: 2,
     stateMachine: ['a', 'b'],
@@ -169,7 +170,7 @@ export function doubleCandidacyStart(seed: number): readonly NodeState[] {
     ...createNode(id, 3, seed),
     currentTerm: 1,
     votedFor,
-    log: [{ term: 1, command: 'a' }],
+    log: logFrom([{ term: 1, command: 'a' }]),
     commitIndex: 1,
     lastApplied: 1,
     stateMachine: ['a'],

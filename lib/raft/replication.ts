@@ -7,7 +7,15 @@
 import { enforceAppendEntriesConsistencyCheck } from './rules'
 import { resetElectionTimer, resetHeartbeatTimer, stopElectionTimer } from './timers'
 import { advanceCommitIndex } from './commit'
-import { entryAt, hasIndex, lastLogIndex, sliceFrom, termAt, truncateTo } from './log'
+import {
+  append,
+  entryAt,
+  hasIndex,
+  lastLogIndex,
+  replaceFrom,
+  sliceFrom,
+  termAt,
+} from './log'
 import type {
   AppendEntriesRequest,
   AppendEntriesResponse,
@@ -98,9 +106,9 @@ export function appendClientEntry(
   command: string,
   config: RaftConfig,
 ): Transition {
-  const log = [...state.log, { term: state.currentTerm, command }]
+  const log = append(state.log, [{ term: state.currentTerm, command }])
   const matchIndex = [...state.matchIndex]
-  matchIndex[state.id] = log.length
+  matchIndex[state.id] = lastLogIndex(log)
   const leader: NodeState = { ...state, log, matchIndex }
   // Replicate immediately rather than waiting for the next heartbeat. This is a
   // latency choice, not a correctness one — the heartbeat would carry it anyway.
@@ -179,13 +187,16 @@ export function handleAppendEntries(
     const entry = request.entries[offset]
     if (entry === undefined) continue
     const index = request.prevLogIndex + 1 + offset
+    // Already covered by this server's snapshot: it applied that entry before
+    // discarding it, so it is committed and cannot conflict. Skip it.
+    if (index <= log.lastIncludedIndex) continue
     const existing = entryAt(log, index)
     if (existing === undefined) {
-      log = [...log, entry]
+      log = append(log, [entry])
       continue
     }
     if (existing.term !== entry.term) {
-      log = [...truncateTo(log, index - 1), entry]
+      log = replaceFrom(log, index, entry)
     }
     // Same index, same term: by Log Matching the entries are identical. Leave it.
   }

@@ -11,6 +11,7 @@
 
 import { check, EMPTY_CHECKER_STATE } from '@/lib/invariants/checker'
 import type { CheckerState, ClusterSnapshot, Violation } from '@/lib/invariants/types'
+import { firstLogIndex, heldEntries } from '@/lib/raft/log'
 import { createNode, step as raftStep } from '@/lib/raft/node'
 import { resetElectionTimer, resetHeartbeatTimer } from '@/lib/raft/timers'
 import { UNMODIFIED_RAFT, type AblationFlags } from '@/lib/raft/rules'
@@ -115,7 +116,10 @@ export function snapshotOf(
       // A crashed server is not exercising leadership, whatever its frozen role says.
       isLeader: node.role === 'leader' && crashed[node.id] !== true,
       currentTerm: node.currentTerm,
-      log: node.log.map((entry) => ({ term: entry.term, command: entry.command })),
+      log: heldEntries(node.log).map((entry) => ({ term: entry.term, command: entry.command })),
+      logStartIndex: firstLogIndex(node.log),
+      lastIncludedIndex: node.log.lastIncludedIndex,
+      lastIncludedTerm: node.log.lastIncludedTerm,
       commitIndex: node.commitIndex,
       applied: node.stateMachine,
       lastApplied: node.lastApplied,

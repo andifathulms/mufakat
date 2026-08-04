@@ -11,6 +11,7 @@
  */
 
 import { step as raftStep } from '@/lib/raft/node'
+import { heldEntries, lastLogIndex } from '@/lib/raft/log'
 import type { Input, Message, NodeId, NodeState, RaftConfig } from '@/lib/raft/types'
 import { check, EMPTY_CHECKER_STATE } from '@/lib/invariants/checker'
 import type { CheckerState, SafetyProperty, Violation } from '@/lib/invariants/types'
@@ -115,13 +116,17 @@ export class Director {
     return found?.id ?? null
   }
 
-  /** Terms of a node's log, for asserting against the figure. */
+  /** Terms of a node's held entries, for asserting against the figure. */
   logTerms(id: NodeId): number[] {
-    return this.node(id).log.map((entry) => entry.term)
+    return heldEntries(this.node(id).log).map((entry) => entry.term)
   }
 
   logCommands(id: NodeId): string[] {
-    return this.node(id).log.map((entry) => entry.command)
+    return heldEntries(this.node(id).log).map((entry) => entry.command)
+  }
+
+  lastIndex(id: NodeId): number {
+    return lastLogIndex(this.node(id).log)
   }
 
   violationsOf(property: SafetyProperty): Violation[] {

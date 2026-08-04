@@ -10,6 +10,7 @@
  */
 
 import type { Dictionary } from '@/lib/i18n'
+import { entryAt, lastLogIndex } from '@/lib/raft/log'
 import type { LogEntry } from '@/lib/raft/types'
 import type { TraceStep } from '@/lib/sim/trace'
 
@@ -19,7 +20,7 @@ interface Props {
 }
 
 export function LogLedger({ step, dict }: Props) {
-  const highest = Math.max(1, ...step.nodes.map((node) => node.log.length))
+  const highest = Math.max(1, ...step.nodes.map((node) => lastLogIndex(node.log)))
   const indices = Array.from({ length: highest }, (_, i) => highest - i)
 
   // An entry disagrees when some other node holds a different entry at that index.
@@ -27,7 +28,7 @@ export function LogLedger({ step, dict }: Props) {
   for (let index = 1; index <= highest; index += 1) {
     const seen = new Set<string>()
     for (const node of step.nodes) {
-      const entry = node.log[index - 1]
+      const entry = entryAt(node.log, index)
       if (entry !== undefined) seen.add(`${entry.term}:${entry.command}`)
     }
     if (seen.size > 1) disagreements.add(index)
@@ -74,16 +75,21 @@ export function LogLedger({ step, dict }: Props) {
               {step.nodes.map((node) => (
                 <Cell
                   key={node.id}
-                  entry={node.log[index - 1]}
+                  entry={entryAt(node.log, index)}
                   index={index}
                   committed={node.commitIndex >= index}
                   applied={node.lastApplied >= index}
+                  // Below the snapshot point the entry is gone but not lost: it was
+                  // applied before it could be discarded, and is folded into the
+                  // server's state. Drawing it as an empty row would read as
+                  // divergence, which is the opposite of what happened.
+                  compacted={index <= node.log.lastIncludedIndex}
                   dict={dict}
                 />
               ))}
             </tr>
           ))}
-          {highest === 1 && step.nodes.every((node) => node.log.length === 0) && (
+          {highest === 1 && step.nodes.every((node) => lastLogIndex(node.log) === 0) && (
             <tr>
               <td
                 colSpan={step.nodes.length + 1}
@@ -105,14 +111,33 @@ function Cell({
   index,
   committed,
   applied,
+  compacted,
   dict,
 }: {
   entry: LogEntry | undefined
   index: number
   committed: boolean
   applied: boolean
+  compacted: boolean
   dict: Dictionary
 }) {
+  if (entry === undefined && compacted) {
+    // Snapshotted away. In a ledger the earlier pages are not blank — they have been
+    // summarised and bound, so this is hatched rather than empty.
+    return (
+      <td
+        className="border-b border-l border-ink-rule bg-stock-deep px-2 py-1"
+        title={`${dict.ledger.index} ${index} — ${dict.ledger.compacted}`}
+      >
+        <span className="sr-only">
+          {dict.ledger.index} {index}, {dict.ledger.compacted}
+        </span>
+        <span aria-hidden className="block text-center text-[10px] text-ink-faint">
+          ⌷
+        </span>
+      </td>
+    )
+  }
   if (entry === undefined) {
     // A missing row is what makes divergence read as a broken line.
     return <td className="border-b border-l border-ink-rule px-2 py-1" />

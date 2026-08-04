@@ -48,7 +48,16 @@ export interface NodeSnapshot {
   readonly id: number
   readonly isLeader: boolean
   readonly currentTerm: number
+  /**
+   * The entries this server still holds. Not necessarily from index 1: once a server
+   * has snapshotted (§7), earlier entries are discarded and `logStartIndex` moves up.
+   */
   readonly log: readonly SnapshotEntry[]
+  /** Absolute log index of `log[0]`. 1 when nothing has been compacted. */
+  readonly logStartIndex: number
+  /** Figure 13: the last index the snapshot covers, and its term. 0 when uncompacted. */
+  readonly lastIncludedIndex: number
+  readonly lastIncludedTerm: number
   /**
    * The highest index this server considers committed. The checker takes the
    * server's word for it — that is precisely what makes the check meaningful. If the
@@ -98,6 +107,18 @@ export interface CheckerState {
 export interface LeaderLogRecord {
   readonly term: number
   readonly log: readonly SnapshotEntry[]
+  /** Absolute index of `log[0]` when this observation was taken. */
+  readonly logStartIndex: number
+  /** Highest index held when this observation was taken. */
+  readonly lastIndex: number
+}
+
+/** What the checker was able to learn about one index on one server. */
+export interface KnownEntry {
+  /** Known when the entry is held, or when the index is exactly the snapshot point. */
+  readonly term: number | undefined
+  /** Known when the entry is held, or when the server has applied it. */
+  readonly command: string | undefined
 }
 
 export interface CommittedRecord {

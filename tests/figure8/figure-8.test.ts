@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { UNMODIFIED_RAFT } from '@/lib/raft/rules'
 import type { NodeState, RaftConfig } from '@/lib/raft/types'
+import { logFrom, heldEntries } from '@/lib/raft/log'
 import { createNode } from '@/lib/raft/node'
 import { Director } from '../helpers/director'
 
@@ -52,7 +53,7 @@ function panelA(config: RaftConfig): NodeState[] {
     ...createNode(id, 5, 20_140_000 + id),
     currentTerm: 2,
     votedFor: S1,
-    log: [{ term: 1, command: 'a' }],
+    log: logFrom([{ term: 1, command: 'a' }]),
     commitIndex: 1,
     lastApplied: 1,
     stateMachine: ['a'],
@@ -61,7 +62,7 @@ function panelA(config: RaftConfig): NodeState[] {
   const nodes = ALL.map(base)
   const withEntry = (node: NodeState): NodeState => ({
     ...node,
-    log: [...node.log, { term: 2, command: 'b' }],
+    log: logFrom([...heldEntries(node.log), { term: 2, command: 'b' }]),
   })
 
   nodes[S1] = {

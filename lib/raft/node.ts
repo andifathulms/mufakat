@@ -9,6 +9,7 @@
  */
 
 import { prngFromSeed } from '@/lib/sim/prng'
+import { EMPTY_LOG, lastLogIndex } from './log'
 import { persistVotedForAcrossRestart, stepDownOnHigherTerm } from './rules'
 import { handleRequestVote, handleRequestVoteResponse, startElection } from './election'
 import {
@@ -38,7 +39,7 @@ export function createNode(id: NodeId, nodeCount: number, seed: number): NodeSta
     role: 'follower',
     currentTerm: 0,
     votedFor: null,
-    log: [],
+    log: EMPTY_LOG,
     commitIndex: 0,
     lastApplied: 0,
     nextIndex: new Array<number>(nodeCount).fill(1),
@@ -123,7 +124,7 @@ function restart(state: NodeState, config: RaftConfig): Transition {
     votedFor: persistVotedForAcrossRestart(config.flags) ? state.votedFor : null,
     commitIndex: 0,
     lastApplied: 0,
-    nextIndex: new Array<number>(config.nodeCount).fill(state.log.length + 1),
+    nextIndex: new Array<number>(config.nodeCount).fill(lastLogIndex(state.log) + 1),
     matchIndex: new Array<number>(config.nodeCount).fill(0),
     votesGranted: new Array<boolean>(config.nodeCount).fill(false),
     leaderId: null,

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { heldEntries } from '@/lib/raft/log'
+import { logOfNode } from '../helpers/nodes'
 import { run, scenario } from '@/lib/sim/simulation'
 import { traceDigest } from '@/lib/sim/trace'
 import { fuzzScenario } from '../helpers/generate'
@@ -83,7 +85,7 @@ describe('trace determinism', () => {
         expect(Number.isInteger(node.currentTerm)).toBe(true)
         expect(Number.isInteger(node.commitIndex)).toBe(true)
         expect(Number.isInteger(node.lastApplied)).toBe(true)
-        for (const entry of node.log) expect(Number.isInteger(entry.term)).toBe(true)
+        for (const entry of heldEntries(node.log)) expect(Number.isInteger(entry.term)).toBe(true)
       }
     }
   })

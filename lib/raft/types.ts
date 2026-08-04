@@ -8,6 +8,7 @@
 
 import type { Prng } from '@/lib/sim/prng'
 import type { AblationFlags } from './rules'
+import type { Log } from './log'
 
 export type NodeId = number
 
@@ -92,7 +93,11 @@ export interface NodeState {
   // Persistent state on all servers (Figure 2, State). Survives a restart.
   readonly currentTerm: number
   readonly votedFor: NodeId | null
-  readonly log: readonly LogEntry[]
+  /**
+   * The entries this server holds, bundled with the snapshot point beneath them.
+   * Only `lib/raft/log.ts` may look inside. See §7 and Figure 13.
+   */
+  readonly log: Log
 
   // Volatile state on all servers. Reset by a restart.
   readonly commitIndex: number

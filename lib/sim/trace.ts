@@ -11,7 +11,8 @@
  */
 
 import type { Violation } from '@/lib/invariants/types'
-import type { LogEntry, Message, NodeId, NodeState } from '@/lib/raft/types'
+import { heldEntries, type Log } from '@/lib/raft/log'
+import type { Message, NodeId, NodeState } from '@/lib/raft/types'
 import type { NetworkState } from './network'
 
 /** A message on the wire: sent, not yet delivered. */
@@ -137,9 +138,15 @@ export function traceDigest(trace: Trace): string {
   for (const step of trace.steps) {
     lines.push(`${step.index}@${step.time} ${describeEvent(step.event)}`)
     for (const node of step.nodes) {
+      // The snapshot point is emitted only when there is one, so a run that never
+      // compacts produces exactly the digest it produced before compaction existed.
+      const snapshot =
+        node.log.lastIncludedIndex === 0
+          ? ''
+          : ` snap=${node.log.lastIncludedIndex}/${node.log.lastIncludedTerm}`
       lines.push(
         `  n${node.id} ${node.role} t=${node.currentTerm} v=${node.votedFor ?? '-'} ` +
-          `c=${node.commitIndex} a=${node.lastApplied} log=${describeLog(node.log)}`,
+          `c=${node.commitIndex} a=${node.lastApplied} log=${describeLog(node.log)}${snapshot}`,
       )
     }
     for (const flight of step.inFlight) {
@@ -152,8 +159,10 @@ export function traceDigest(trace: Trace): string {
   return lines.join('\n')
 }
 
-function describeLog(log: readonly LogEntry[]): string {
-  return log.map((entry) => `${entry.term}:${entry.command}`).join(',')
+function describeLog(log: Log): string {
+  return heldEntries(log)
+    .map((entry) => `${entry.term}:${entry.command}`)
+    .join(',')
 }
 
 export function describeEvent(event: TraceEvent): string {
