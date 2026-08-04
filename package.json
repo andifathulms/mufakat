@@ -1,0 +1,38 @@
+{
+  "name": "mufakat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Raft consensus simulator with deterministic simulation, invariant checking, and rule ablation.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "preview": "node scripts/preview.mjs",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:fuzz": "vitest run tests/fuzz",
+    "test:ablation": "vitest run tests/ablation",
+    "test:figure8": "vitest run tests/figure8",
+    "test:determinism": "vitest run tests/determinism",
+    "test:figure2": "vitest run tests/figure2",
+    "typecheck": "tsc --noEmit",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.2.15",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.10",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "autoprefixer": "10.4.19",
+    "eslint": "8.57.0",
+    "eslint-config-next": "14.2.15",
+    "postcss": "8.4.39",
+    "tailwindcss": "3.4.6",
+    "typescript": "5.5.3",
+    "vitest": "2.0.5"
+  },
+  "packageManager": "pnpm@9.15.9"
+}
