@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * The material world is a ledger book: ruled columns, entries in numbered rows,
+ * corrections struck and rewritten. Raft's central object is literally a log, so the
+ * metaphor is structural rather than decorative.
+ */
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  background-color: theme('colors.stock.DEFAULT');
+}
+
+body {
+  color: theme('colors.ink.DEFAULT');
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numeric content — terms, indices, node ids — is set in tabular figures so that
+   columns align down the page the way a ruled ledger does. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* The ruled grid the log ledger is set on. Horizontal rules make divergence between
+   node columns read as a broken line. */
+.ruled > * + * {
+  border-top: 1px solid theme('colors.ink.rule');
+}
+
+/* Election timeout: a thin depleting rule under a follower. The only ambient motion
+   in the app, and it encodes real information about what is about to happen. */
+@keyframes deplete {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.deplete {
+  transform-origin: left center;
+  animation: deplete linear forwards;
+}
+
+@keyframes slip {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slip-in {
+  animation: slip 180ms ease-out;
+}
+
+/* Autoplay and ambient motion are disabled; stepping stays instantaneous. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid theme('colors.leader');
+  outline-offset: 2px;
+}

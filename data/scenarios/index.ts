@@ -42,8 +42,11 @@ export interface ScenarioDefinition {
   readonly title: string
   /** One-line description, Indonesian. Algorithm terms stay in English. */
   readonly summary: string
-  /** The single named thing this scenario demonstrates. */
-  readonly phenomenon: string
+  /**
+   * The single named thing this scenario demonstrates. Bilingual: it is shown to the
+   * reader, and Indonesian is the language of explanation.
+   */
+  readonly phenomenon: { readonly id: string; readonly en: string }
   readonly spec: Scenario
   /**
    * The rule to switch off to see this scenario's point, and the property that then
@@ -102,8 +105,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     title: 'Pemilihan bersih',
     summary:
       'Lima node, jaringan yang kehilangan sebagian pesan. Satu leader terpilih, lalu entry direplikasi dan commit.',
-    phenomenon:
-      'A leader is elected from a standing start and client entries commit, under a network that loses messages — the ordinary case, which is worth seeing before anything breaks.',
+    phenomenon: {
+      id:
+        'Leader terpilih dari keadaan awal dan entry dari klien berhasil commit, di bawah jaringan yang kehilangan pesan — kasus biasa, yang layak dilihat sebelum apa pun dirusak.',
+      en: 'A leader is elected from a standing start and client entries commit, under a network that loses messages — the ordinary case, which is worth seeing before anything breaks.',
+    },
     spec: scenario({
       seed: 5,
       nodeCount: 5,
@@ -123,8 +129,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     title: 'Split vote',
     summary:
       'Election timeout yang hampir seragam membuat beberapa node mencalonkan diri bersamaan. Tidak ada tiebreak — jitter timeout yang menyelesaikannya.',
-    phenomenon:
-      'With the randomized election timeout narrowed almost to nothing, candidates collide and split the vote. Raft has no tiebreak rule: the split is resolved only because the next round of timeouts differs. This is what the randomization is for.',
+    phenomenon: {
+      id:
+        'Dengan randomisasi election timeout dipersempit hampir habis, para candidate bertabrakan dan suara terbelah. Raft tidak punya aturan tiebreak: perpecahan itu selesai semata-mata karena putaran timeout berikutnya berbeda. Untuk inilah randomisasi ada.',
+      en: 'With the randomized election timeout narrowed almost to nothing, candidates collide and split the vote. Raft has no tiebreak rule: the split is resolved only because the next round of timeouts differs. This is what the randomization is for.',
+    },
     spec: scenario({
       seed: 3,
       nodeCount: 5,
@@ -145,8 +154,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     title: 'Leader terdampar di minoritas',
     summary:
       'Leader terpotong ke sisi minoritas. Ia tetap mengira dirinya leader, tetapi tidak bisa commit apa pun; sisi mayoritas memilih leader baru di term yang lebih tinggi.',
-    phenomenon:
-      'A leader partitioned into a minority still believes it leads, and still accepts client entries — but it can never commit them, because commitment needs a majority. The majority side elects a new leader in a higher term, and when the partition heals the stale leader learns of that term and steps down. Ablating the step-down rule leaves two leaders in one term.',
+    phenomenon: {
+      id:
+        'Leader yang terpotong ke minoritas tetap mengira dirinya memimpin, dan tetap menerima entry dari klien — tetapi tidak akan pernah bisa meng-commit-nya, karena commit butuh mayoritas. Sisi mayoritas memilih leader baru di term yang lebih tinggi, dan ketika partisi tersambung kembali leader basi itu mengetahui term tersebut lalu mundur. Mematikan aturan step-down meninggalkan dua leader dalam satu term.',
+      en: 'A leader partitioned into a minority still believes it leads, and still accepts client entries — but it can never commit them, because commitment needs a majority. The majority side elects a new leader in a higher term, and when the partition heals the stale leader learns of that term and steps down. Ablating the step-down rule leaves two leaders in one term.',
+    },
     spec: scenario({
       seed: 13,
       nodeCount: 5,
@@ -169,8 +181,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     title: 'Divergensi log dan perbaikannya',
     summary:
       'Dua sisi partisi menerima entry berbeda pada index yang sama. Setelah heal, leader baru menelusuri nextIndex mundur sampai log cocok, lalu menimpa ekor yang menyimpang.',
-    phenomenon:
-      'The old leader, stranded with one follower, appends entries that can never commit. The majority elects a new leader that appends different entries at the same indices. When the partition heals, the AppendEntries consistency check fails, the leader walks nextIndex backwards until the logs agree, and overwrites the divergent tail. This is the signature view: rows that fail to line up, and then line up again.',
+    phenomenon: {
+      id:
+        'Leader lama, terdampar bersama satu follower, menambahkan entry yang tidak akan pernah bisa commit. Mayoritas memilih leader baru yang menambahkan entry berbeda pada index yang sama. Setelah partisi sembuh, AppendEntries consistency check gagal, leader menelusuri nextIndex mundur sampai kedua log bertemu, lalu menimpa ekor yang menyimpang. Inilah tampilan ciri khasnya: baris yang gagal sejajar, lalu sejajar kembali.',
+      en: 'The old leader, stranded with one follower, appends entries that can never commit. The majority elects a new leader that appends different entries at the same indices. When the partition heals, the AppendEntries consistency check fails, the leader walks nextIndex backwards until the logs agree, and overwrites the divergent tail. This is the signature view: rows that fail to line up, and then line up again.',
+    },
     spec: scenario({
       seed: 8,
       nodeCount: 5,
@@ -195,8 +210,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     title: 'Leader jatuh di tengah replikasi',
     summary:
       'Leader menerima entry lalu jatuh sebelum mayoritas menyimpannya. Leader berikutnya memutuskan nasib entry itu.',
-    phenomenon:
-      'A leader accepts an entry and crashes before a majority stores it. The entry is neither committed nor discarded: whether it survives depends entirely on whether the next leader happens to hold it, which the election restriction decides.',
+    phenomenon: {
+      id:
+        'Leader menerima sebuah entry lalu jatuh sebelum mayoritas menyimpannya. Entry itu tidak committed dan juga tidak dibuang: apakah ia bertahan sepenuhnya bergantung pada apakah leader berikutnya kebetulan memilikinya — dan itulah yang diputuskan oleh election restriction.',
+      en: 'A leader accepts an entry and crashes before a majority stores it. The entry is neither committed nor discarded: whether it survives depends entirely on whether the next leader happens to hold it, which the election restriction decides.',
+    },
     spec: scenario({
       seed: 4,
       nodeCount: 5,
@@ -220,8 +238,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     title: 'Kandidat dengan log tertinggal',
     summary:
       'Satu node terisolasi selama cluster meng-commit beberapa entry. Term-nya menanjak, lognya tidak. Election restriction yang menahannya agar tidak pernah menang.',
-    phenomenon:
-      'An isolated node campaigns over and over, so its term climbs far above everyone else while its log stays short. When the partition heals its high term forces a new election — and the election restriction is the only thing stopping it from winning with a log that is missing committed entries. Turn the restriction off and those entries are lost.',
+    phenomenon: {
+      id:
+        'Node yang terisolasi mencalonkan diri berkali-kali, sehingga term-nya menanjak jauh di atas yang lain sementara lognya tetap pendek. Ketika partisi sembuh, term tingginya memaksa election baru — dan election restriction adalah satu-satunya yang mencegahnya menang dengan log yang kehilangan entry yang sudah committed. Matikan restriction itu dan entry tersebut hilang.',
+      en: 'An isolated node campaigns over and over, so its term climbs far above everyone else while its log stays short. When the partition heals its high term forces a new election — and the election restriction is the only thing stopping it from winning with a log that is missing committed entries. Turn the restriction off and those entries are lost.',
+    },
     spec: scenario({
       seed: 3,
       nodeCount: 5,
@@ -245,8 +266,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     title: 'Figure 8',
     summary:
       'Skenario dari makalah, dimainkan langsung. Sebuah entry dari term lama tersimpan di mayoritas — dan masih bisa ditimpa.',
-    phenomenon:
-      "The paper's Figure 8, played out in the simulator. It opens at panel (a): S1 leads term 2 and has replicated index 2 to S2 only. S1 crashes, S5 wins term 3 and writes a different entry at index 2, S1 returns and wins term 4 and pushes its index 2 onto a majority — and that entry is still not safe. Turn off the current-term commit rule and it is declared committed, then overwritten. The exact panel-by-panel reproduction lives in tests/figure8.",
+    phenomenon: {
+      id:
+        'Figure 8 dari makalah, dimainkan di dalam simulator. Dimulai dari panel (a): S1 memimpin term 2 dan baru mereplikasi index 2 ke S2 saja. S1 jatuh, S5 memenangkan term 3 dan menulis entry berbeda di index 2, S1 kembali dan memenangkan term 4 lalu mendorong index 2 miliknya ke mayoritas — dan entry itu tetap belum aman. Matikan current-term commit rule dan ia dinyatakan committed, lalu ditimpa. Reproduksi persis panel demi panel ada di tests/figure8.',
+      en: "The paper's Figure 8, played out in the simulator. It opens at panel (a): S1 leads term 2 and has replicated index 2 to S2 only. S1 crashes, S5 wins term 3 and writes a different entry at index 2, S1 returns and wins term 4 and pushes its index 2 onto a majority — and that entry is still not safe. Turn off the current-term commit rule and it is declared committed, then overwritten. The exact panel-by-panel reproduction lives in tests/figure8.",
+    },
     spec: scenario({
       seed: 1,
       nodeCount: 5,
@@ -293,8 +317,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     title: 'Memilih dua kali setelah restart',
     summary:
       'Satu node memberi suara, jatuh, lalu hidup kembali. Karena votedFor persistent, ia menolak memilih lagi di term yang sama.',
-    phenomenon:
-      'A follower votes, crashes and restarts. Because votedFor is persistent state, it remembers and refuses to vote a second time in the same term. Make votedFor volatile and the same node hands a second candidate the majority it needs, producing two leaders in one term.',
+    phenomenon: {
+      id:
+        'Seorang follower memberi suara, jatuh, lalu hidup kembali. Karena votedFor adalah persistent state, ia mengingatnya dan menolak memilih untuk kedua kalinya di term yang sama. Buat votedFor volatile dan node yang sama menyerahkan mayoritas yang dibutuhkan candidate kedua, menghasilkan dua leader dalam satu term.',
+      en: 'A follower votes, crashes and restarts. Because votedFor is persistent state, it remembers and refuses to vote a second time in the same term. Make votedFor volatile and the same node hands a second candidate the majority it needs, producing two leaders in one term.',
+    },
     spec: scenario({
       seed: 11,
       nodeCount: 3,
@@ -319,8 +346,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     title: 'Consistency check dimatikan',
     summary:
       'Ditemukan oleh fuzz suite: partisi, kehilangan pesan, dan dua log yang sepakat di satu (index, term) tetapi berbeda sebelumnya.',
-    phenomenon:
-      'Found by the fuzz suite rather than built by hand, because the AppendEntries consistency check only fails to matter when nextIndex happens to point past a divergence — a coincidence of timing that is hard to script and easy to search for. With the check off, two logs come to hold the same entry at the same index and term over different prefixes, which is Log Matching failing exactly as stated.',
+    phenomenon: {
+      id:
+        'Ditemukan oleh fuzz suite, bukan dibangun tangan, karena AppendEntries consistency check hanya benar-benar berarti ketika nextIndex kebetulan menunjuk melewati titik divergensi — kebetulan waktu yang sulit diskripkan dan mudah dicari. Dengan check dimatikan, dua log akhirnya memuat entry yang sama pada index dan term yang sama di atas prefix yang berbeda, yaitu Log Matching gagal persis seperti pernyataannya.',
+      en: 'Found by the fuzz suite rather than built by hand, because the AppendEntries consistency check only fails to matter when nextIndex happens to point past a divergence — a coincidence of timing that is hard to script and easy to search for. With the check off, two logs come to hold the same entry at the same index and term over different prefixes, which is Log Matching failing exactly as stated.',
+    },
     spec: scenario({
       seed: 22,
       nodeCount: 5,
@@ -349,8 +379,11 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     title: 'Mencalonkan diri tanpa menaikkan term',
     summary:
       'Ditemukan oleh fuzz suite: sebuah node yang sudah memilih orang lain mencalonkan diri di term yang sama, menimpa suaranya sendiri.',
-    phenomenon:
-      "Found by the fuzz suite. Incrementing the term on candidacy is what makes a campaign a new ballot. Without it a server that has already voted for someone else campaigns inside the same term and overwrites its own vote — so one term can hold two majorities, and two leaders.",
+    phenomenon: {
+      id:
+        'Ditemukan oleh fuzz suite. Menaikkan term saat mencalonkan diri adalah yang membuat sebuah kampanye menjadi pemungutan suara baru. Tanpanya, server yang sudah memilih orang lain berkampanye di dalam term yang sama dan menimpa suaranya sendiri — sehingga satu term bisa memuat dua mayoritas, dan dua leader.',
+      en: "Found by the fuzz suite. Incrementing the term on candidacy is what makes a campaign a new ballot. Without it a server that has already voted for someone else campaigns inside the same term and overwrites its own vote — so one term can hold two majorities, and two leaders.",
+    },
     spec: scenario({
       seed: 795,
       nodeCount: 3,

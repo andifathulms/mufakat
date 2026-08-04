@@ -48,7 +48,11 @@ createServer(async (req, res) => {
     res.end(`Not found. The site is served under ${BASE_PATH}/`)
     return
   }
-  const rel = url.pathname.slice(BASE_PATH.length) || '/'
+  // Decode before touching the filesystem: the App Router emits chunks under a
+  // literal `[locale]` directory, which the browser requests as `%5Blocale%5D`.
+  // Pages decodes it; a preview server that does not gives a false failure exactly
+  // where this script exists to give confidence.
+  const rel = decodeURIComponent(url.pathname.slice(BASE_PATH.length)) || '/'
   const file = await resolveFile(rel)
   if (!file) {
     const notFound = await resolveFile('/404.html')

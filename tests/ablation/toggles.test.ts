@@ -94,7 +94,8 @@ describe('the scenario library', () => {
       expect(entry.summary.length).toBeGreaterThan(20)
       // The phenomenon is the one thing the scenario exists to show. It is not
       // decoration: a scenario without one has not been curated.
-      expect(entry.phenomenon.length).toBeGreaterThan(60)
+      expect(entry.phenomenon.id.length).toBeGreaterThan(60)
+      expect(entry.phenomenon.en.length).toBeGreaterThan(60)
     }
   })
 

@@ -1,0 +1,93 @@
+name: Deploy
+
+# The fuzz suite gates the deploy. A subtly wrong Raft teaches wrong Raft, so no
+# build reaches Pages without all five safety properties holding across the whole
+# randomized suite. Do not weaken this.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Figure 2 conformance
+        run: pnpm test:figure2
+
+      - name: Determinism
+        run: pnpm test:determinism
+
+      - name: Figure 8
+        run: pnpm test:figure8
+
+      - name: Ablation — every toggle breaks its property
+        run: pnpm test:ablation
+
+      # The backbone of the correctness argument. Slow on purpose.
+      - name: Invariant fuzzing
+        run: pnpm test:fuzz
+
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Verify the export
+        run: |
+          test -f out/.nojekyll || { echo "out/.nojekyll is missing"; exit 1; }
+          test -f out/index.html || { echo "out/index.html is missing"; exit 1; }
+          test -f out/id/simulasi/index.html || { echo "the simulation page is missing"; exit 1; }
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
