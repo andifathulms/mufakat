@@ -1,0 +1,219 @@
+/**
+ * The node state machine. `step(state, input, config) -> { state, outbox, timers }`.
+ *
+ * Pure. No clock reads, no `Date`, no `Math.random`, no I/O, no DOM, no module-level
+ * mutable state. All randomness comes from the PRNG carried inside `NodeState`.
+ *
+ * This file holds the two Figure 2 "All Servers" rules, which wrap every dispatch,
+ * and the restart path. The per-RPC rules live in `election.ts` and `replication.ts`.
+ */
+
+import { prngFromSeed } from '@/lib/sim/prng'
+import { persistVotedForAcrossRestart, stepDownOnHigherTerm } from './rules'
+import { handleRequestVote, handleRequestVoteResponse, startElection } from './election'
+import {
+  appendClientEntry,
+  broadcastAppendEntries,
+  handleAppendEntries,
+  handleAppendEntriesResponse,
+  type Transition,
+} from './replication'
+import { applyCommitted } from './commit'
+import { resetElectionTimer, resetHeartbeatTimer, stopHeartbeatTimer } from './timers'
+import type {
+  AppliedEntry,
+  Input,
+  Message,
+  NodeId,
+  NodeState,
+  RaftConfig,
+  StepResult,
+  TimerRequest,
+} from './types'
+
+/** A fresh node. `seed` and `id` together fix its private PRNG stream. */
+export function createNode(id: NodeId, nodeCount: number, seed: number): NodeState {
+  return {
+    id,
+    role: 'follower',
+    currentTerm: 0,
+    votedFor: null,
+    log: [],
+    commitIndex: 0,
+    lastApplied: 0,
+    nextIndex: new Array<number>(nodeCount).fill(1),
+    matchIndex: new Array<number>(nodeCount).fill(0),
+    votesGranted: new Array<boolean>(nodeCount).fill(false),
+    leaderId: null,
+    // Stream `id + 1` so node 0 does not share the seed's base stream with anything
+    // else that draws from it.
+    prng: prngFromSeed(seed, id + 1),
+    electionTimerId: 0,
+    heartbeatTimerId: 0,
+    stateMachine: [],
+  }
+}
+
+/**
+ * Figure 2, Rules for Servers, All Servers rule 2:
+ * "If RPC request or response contains term T > currentTerm: set currentTerm = T,
+ *  convert to follower (§5.1)"
+ *
+ * The single call site of the `stepDownOnHigherTerm` guard. With it off, a superseded
+ * leader keeps both its role and its stale term, so it goes on issuing AppendEntries
+ * alongside the real leader.
+ */
+function observeTerm(
+  state: NodeState,
+  term: number,
+  config: RaftConfig,
+): { state: NodeState; timers: readonly TimerRequest[] } {
+  if (term <= state.currentTerm) return { state, timers: [] }
+  if (!stepDownOnHigherTerm(config.flags)) return { state, timers: [] }
+
+  const wasFollower = state.role === 'follower'
+  let node: NodeState = {
+    ...state,
+    currentTerm: term,
+    // A new term is a new ballot: the vote record from the old term does not carry.
+    votedFor: null,
+    role: 'follower',
+    leaderId: null,
+    votesGranted: new Array<boolean>(config.nodeCount).fill(false),
+  }
+  if (wasFollower) {
+    // Already a follower with a running election timer. Figure 2 resets the timer only
+    // on hearing from the current leader or granting a vote, and this is neither.
+    return { state: node, timers: [] }
+  }
+  // Stepping down from candidate or leader: stop heartbeating and start counting
+  // down to the next election, or the node would never campaign again.
+  node = stopHeartbeatTimer(node)
+  const timerReset = resetElectionTimer(node, config)
+  return { state: timerReset.state, timers: [timerReset.timer] }
+}
+
+/**
+ * Restart after a crash.
+ *
+ * Figure 2, State: `currentTerm`, `votedFor` and `log` are persistent and survive;
+ * `commitIndex` and `lastApplied` are volatile and are reinitialised. Leader state is
+ * volatile too, so the node comes back as a follower.
+ *
+ * The single call site of the `persistVotedForAcrossRestart` guard. With it off the
+ * node forgets who it voted for and can vote a second time in the same term, electing
+ * two leaders in it.
+ */
+function restart(state: NodeState, config: RaftConfig): Transition {
+  const rebooted: NodeState = {
+    ...state,
+    role: 'follower',
+    votedFor: persistVotedForAcrossRestart(config.flags) ? state.votedFor : null,
+    commitIndex: 0,
+    lastApplied: 0,
+    nextIndex: new Array<number>(config.nodeCount).fill(state.log.length + 1),
+    matchIndex: new Array<number>(config.nodeCount).fill(0),
+    votesGranted: new Array<boolean>(config.nodeCount).fill(false),
+    leaderId: null,
+    heartbeatTimerId: state.heartbeatTimerId + 1,
+  }
+  const timerReset = resetElectionTimer(rebooted, config)
+  return { state: timerReset.state, outbox: [], timers: [timerReset.timer] }
+}
+
+/** Route a message to its Figure 2 receiver. Exhaustive on `message.type`. */
+function dispatch(state: NodeState, message: Message, config: RaftConfig): Transition {
+  switch (message.type) {
+    case 'RequestVote':
+      return handleRequestVote(state, message, config)
+    case 'RequestVoteResponse':
+      return handleRequestVoteResponse(state, message, config)
+    case 'AppendEntries':
+      return handleAppendEntries(state, message, config)
+    case 'AppendEntriesResponse':
+      return handleAppendEntriesResponse(state, message, config)
+    default: {
+      // A new message type must surface every handler that has to deal with it.
+      const unreachable: never = message
+      throw new Error(`Unhandled message type: ${JSON.stringify(unreachable)}`)
+    }
+  }
+}
+
+/** The one entry point into the algorithm. */
+export function step(state: NodeState, input: Input, config: RaftConfig): StepResult {
+  let node = state
+  let outbox: readonly Message[] = []
+  let timers: readonly TimerRequest[] = []
+
+  switch (input.type) {
+    case 'message': {
+      // Figure 2, All Servers rule 2, applied to every RPC request and response
+      // before the receiver rules see it.
+      const observed = observeTerm(node, input.message.term, config)
+      node = observed.state
+      timers = observed.timers
+      const transition = dispatch(node, input.message, config)
+      node = transition.state
+      outbox = transition.outbox
+      timers = [...timers, ...transition.timers]
+      break
+    }
+
+    case 'election-timeout': {
+      // A stale generation: this timer was reset before it fired. Ignore it.
+      if (input.timerId !== node.electionTimerId) break
+      // Figure 2, Followers rule 2 and Candidates rule 4. A leader has no election
+      // timeout; if one is somehow outstanding it is stale by definition.
+      if (node.role === 'leader') break
+      const transition = startElection(node, config)
+      node = transition.state
+      outbox = transition.outbox
+      timers = transition.timers
+      break
+    }
+
+    case 'heartbeat-timeout': {
+      if (input.timerId !== node.heartbeatTimerId) break
+      if (node.role !== 'leader') break
+      // Figure 2, Leaders rule 1 (repeat during idle periods) and rule 3 (send
+      // entries from nextIndex) are the same sweep — an empty entries array is the
+      // heartbeat, a non-empty one is replication.
+      const beat = resetHeartbeatTimer(node, config)
+      node = beat.state
+      outbox = broadcastAppendEntries(node, config)
+      timers = [beat.timer]
+      break
+    }
+
+    case 'client-request': {
+      // Figure 2, Leaders rule 2. Only the leader appends; redirection to the leader
+      // is the simulation's job, not the state machine's.
+      if (node.role !== 'leader') break
+      const transition = appendClientEntry(node, input.command, config)
+      node = transition.state
+      outbox = transition.outbox
+      timers = transition.timers
+      break
+    }
+
+    case 'restart': {
+      const transition = restart(node, config)
+      node = transition.state
+      outbox = transition.outbox
+      timers = transition.timers
+      break
+    }
+
+    default: {
+      const unreachable: never = input
+      throw new Error(`Unhandled input: ${JSON.stringify(unreachable)}`)
+    }
+  }
+
+  // Figure 2, All Servers rule 1 — apply anything newly committed. Runs after every
+  // input, because commitIndex can advance on any of them.
+  const settled = applyCommitted(node)
+  const applied: readonly AppliedEntry[] = settled.applied
+  return { state: settled.state, outbox, timers, applied }
+}
