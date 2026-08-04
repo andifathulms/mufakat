@@ -128,6 +128,13 @@ function Cell({
       }`}
     >
       <span className="flex items-baseline gap-1.5">
+        {/* Everything that distinguishes this cell — the term chip, the fill, the tick
+            — is visual. State it in words for anyone who cannot see it. */}
+        <span className="sr-only">
+          {dict.ledger.index} {index}, term {entry.term},{' '}
+          {committed ? dict.ledger.committed : dict.ledger.uncommitted}
+          {applied ? `, ${dict.ledger.applied}` : ''}:{' '}
+        </span>
         {/* Committed entries are visually settled; uncommitted ones are provisional,
             and say so with an outline rather than a colour. */}
         <span

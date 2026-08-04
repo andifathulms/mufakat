@@ -9,7 +9,7 @@
  * exists.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { Dictionary } from '@/lib/i18n'
 import { describeEvent, type Trace } from '@/lib/sim/trace'
 
@@ -35,6 +35,17 @@ function nextAfter(marks: readonly number[], current: number): number | null {
   return null
 }
 
+/** Collapse an ascending list of step indices into contiguous runs. */
+function runsOf(marks: readonly number[]): { from: number; to: number }[] {
+  const runs: { from: number; to: number }[] = []
+  for (const mark of marks) {
+    const open = runs[runs.length - 1]
+    if (open !== undefined && mark === open.to + 1) open.to = mark
+    else runs.push({ from: mark, to: mark })
+  }
+  return runs
+}
+
 export function Timeline({
   trace,
   step,
@@ -48,6 +59,7 @@ export function Timeline({
 }: Props) {
   const last = trace.steps.length - 1
   const current = trace.steps[step]
+  const violationRuns = useMemo(() => runsOf(marks.violations), [marks.violations])
 
   useEffect(() => {
     if (!playing) return
@@ -82,15 +94,25 @@ export function Timeline({
             onStep(Number(event.target.value))
           }}
           aria-label={dict.sim.timeline}
+          // The raw step number says nothing on its own. Announce the virtual time and
+          // what actually happened, which is what the scrubber is for.
+          aria-valuetext={`${dict.sim.step} ${step}, ${dict.sim.time} ${current?.time ?? 0}, ${
+            current === undefined ? '' : describeEvent(current.event)
+          }`}
           className="w-full accent-leader"
         />
-        {/* Violation marks sit above the track, in the one colour reserved for them. */}
+        {/* Violation marks sit above the track, in the one colour reserved for them.
+            A broken property stays broken, so these arrive in long unbroken runs —
+            collapsed into one span each rather than one per step. */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5">
-          {marks.violations.map((mark) => (
+          {violationRuns.map((span) => (
             <span
-              key={mark}
-              className="absolute top-0 h-1.5 w-0.5 bg-vermilion"
-              style={{ left: `${last === 0 ? 0 : (mark / last) * 100}%` }}
+              key={span.from}
+              className="absolute top-0 h-1.5 bg-vermilion"
+              style={{
+                left: `${last === 0 ? 0 : (span.from / last) * 100}%`,
+                width: `${last === 0 ? 100 : Math.max(0.3, ((span.to - span.from) / last) * 100)}%`,
+              }}
             />
           ))}
         </div>
@@ -122,7 +144,7 @@ export function Timeline({
           <select
             value={speed}
             onChange={(event) => onSpeed(Number(event.target.value))}
-            className="border border-ink-rule bg-stock-pale px-1 py-0.5"
+            className="border border-ink-edge bg-stock-pale px-1 py-0.5"
           >
             {[0.5, 1, 2, 4, 8].map((option) => (
               <option key={option} value={option}>
@@ -168,7 +190,7 @@ function Button({ onClick, label, title }: { onClick: () => void; label: string;
       onClick={onClick}
       title={title}
       aria-label={title}
-      className="border border-ink-rule px-2 py-1 hover:bg-stock-deep"
+      className="border border-ink-edge px-2 py-1 hover:bg-stock-deep"
     >
       {label}
     </button>
@@ -199,7 +221,7 @@ function Jump({
       }}
       className={[
         'border px-2 py-0.5 disabled:opacity-35 disabled:cursor-not-allowed',
-        danger ? 'border-vermilion text-vermilion' : 'border-ink-rule hover:bg-stock-deep',
+        danger ? 'border-vermilion text-vermilion' : 'border-ink-edge hover:bg-stock-deep',
       ].join(' ')}
     >
       {label}

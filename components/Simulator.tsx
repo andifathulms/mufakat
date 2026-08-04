@@ -177,7 +177,7 @@ export function Simulator({ locale }: { locale: Locale }) {
             setStep(0)
             setShare((state) => ({ ...state, extraActions: [] }))
           }}
-          className="border border-ink-rule px-3 py-1 font-sans text-xs hover:bg-stock-deep"
+          className="border border-ink-edge px-3 py-1 font-sans text-xs hover:bg-stock-deep"
         >
           {dict.sim.rerun}
         </button>

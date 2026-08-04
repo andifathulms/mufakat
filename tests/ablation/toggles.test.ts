@@ -211,6 +211,55 @@ describe('scenario phenomena actually occur', () => {
     expect(trace.violations).toEqual([])
   })
 
+  it('log-matching-break: the divergent index is repaired, not papered over', () => {
+    const spec = scenarioById('log-matching-break')
+    // The opening position must itself be legal — a hand-built start that already
+    // violates something would prove nothing about the rule under test.
+    const start = run({ ...spec, maxTime: 1, maxSteps: 2 })
+    expect(start.violations).toEqual([])
+
+    const trace = run(spec)
+    expect(trace.violations).toEqual([])
+    const last = trace.steps[trace.steps.length - 1]
+    // Node 4 began with a term-3 entry at index 3 and ends agreeing with everyone.
+    expect(trace.steps[0]?.nodes[4]?.log[2]?.term).toBe(3)
+    const reference = last?.nodes[0]?.log.map((entry) => `${entry.term}:${entry.command}`)
+    for (const node of last?.nodes ?? []) {
+      expect(node.log.map((entry) => `${entry.term}:${entry.command}`)).toEqual(reference)
+    }
+
+    // With the check off, node 4 keeps its divergent index 3 while agreeing at index 4.
+    const broken = run({ ...spec, flags: { ...UNMODIFIED_RAFT, appendEntriesConsistencyCheck: false } })
+    const brokenLast = broken.steps[broken.steps.length - 1]
+    expect(brokenLast?.nodes[4]?.log[2]?.term).toBe(3)
+    expect(brokenLast?.nodes[0]?.log[2]?.term).toBe(2)
+    expect(brokenLast?.nodes[4]?.log[3]?.term).toBe(brokenLast?.nodes[0]?.log[3]?.term)
+    expect(broken.violations.some((v) => v.property === 'log-matching')).toBe(true)
+  })
+
+  it('double-candidacy: the same campaign is a new ballot only if the term rises', () => {
+    const spec = scenarioById('double-candidacy')
+    const start = run({ ...spec, maxTime: 1, maxSteps: 2 })
+    expect(start.violations).toEqual([])
+    // Node 2 has not voted in term 1. That is the hinge of the whole scenario.
+    expect(start.steps[0]?.nodes[2]?.votedFor).toBeNull()
+
+    // With the rule on, node 1's campaign moves to a new term, so the two leaders sit
+    // in different terms — which is not a violation.
+    const trace = run(spec)
+    expect(trace.violations).toEqual([])
+    const contested = trace.steps.find(
+      (step) => step.nodes.filter((node) => node.role === 'leader').length === 2,
+    )
+    expect(contested).toBeDefined()
+    const terms = contested?.nodes.filter((n) => n.role === 'leader').map((n) => n.currentTerm) ?? []
+    expect(new Set(terms).size).toBe(2)
+
+    const broken = run({ ...spec, flags: { ...UNMODIFIED_RAFT, termIncrementOnCandidacy: false } })
+    const violation = broken.violations.find((v) => v.property === 'election-safety')
+    expect(violation?.summary).toMatch(/Two leaders in term 1/)
+  })
+
   it('double-vote-restart: the restarted follower still refuses to vote twice', () => {
     const trace = run(scenarioById('double-vote-restart'))
     expect(trace.violations).toEqual([])

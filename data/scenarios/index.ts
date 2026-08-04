@@ -99,6 +99,89 @@ export function figure8PanelA(seed: number): readonly NodeState[] {
   ]
 }
 
+/**
+ * `log-matching-break`, opening position.
+ *
+ * Node 0 leads term 4 with `[1, 1, 2]`; node 4 holds `[1, 1, 3]`. The two disagree at
+ * index 3 with *different terms*, so Log Matching says nothing about them yet and the
+ * position is legal. What matters is that the leader's `nextIndex` starts at 4, so its
+ * first probe lands on index 3 — exactly the divergent index — which is the only
+ * arrangement in which the consistency check is load-bearing.
+ *
+ * The history that produces it, which is worth stating because a hand-built position
+ * is only worth anything if Raft could actually have reached it:
+ *
+ *   - A term-2 leader with `[1, 1]` appended index 3 and replicated it to node 1.
+ *   - A candidate holding `[1, 1]` won term 3 on votes from nodes 2, 3 and itself —
+ *     nodes 0 and 1 refused it, their last term being 2 — and appended its own index 3,
+ *     reaching node 4 alone.
+ *   - Node 0 then won term 4 on votes from node 1 and node 2. Node 4 refused it, its
+ *     last term being 3 against node 0's 2, and a majority did not need node 4.
+ *
+ * That last step is also the reason this is not a Leader Completeness problem: index 3
+ * was never committed on either side, so losing either version costs nothing.
+ */
+export function logMatchingStart(seed: number): readonly NodeState[] {
+  const prefix = [
+    { term: 1, command: 'a' },
+    { term: 1, command: 'b' },
+  ]
+  const base = (id: number, log: readonly { term: number; command: string }[]): NodeState => ({
+    ...createNode(id, 5, seed),
+    currentTerm: 4,
+    votedFor: 0,
+    log,
+    commitIndex: 2,
+    lastApplied: 2,
+    stateMachine: ['a', 'b'],
+  })
+  const oldEntry = { term: 2, command: 'c-lama' }
+  const newEntry = { term: 3, command: 'c-baru' }
+  return [
+    {
+      ...base(0, [...prefix, oldEntry]),
+      role: 'leader',
+      leaderId: 0,
+      // The probe that matters: nextIndex 4 means prevLogIndex 3, the divergent index.
+      nextIndex: [4, 4, 4, 4, 4],
+      matchIndex: [3, 0, 0, 0, 0],
+    },
+    base(1, [...prefix, oldEntry]),
+    base(2, prefix),
+    base(3, prefix),
+    base(4, [...prefix, newEntry]),
+  ]
+}
+
+/**
+ * `double-candidacy`, opening position.
+ *
+ * Node 0 leads term 1, elected on its own vote and node 1's. Node 2's `votedFor` is
+ * still empty because the RequestVote addressed to it was lost — which is ordinary on
+ * a lossy network, and is the whole hinge of the scenario. A majority of three needs
+ * only two votes, so node 0 won without it.
+ *
+ * Every log is identical and committed, so the election restriction has nothing to say
+ * and cannot be confused for the rule under test.
+ */
+export function doubleCandidacyStart(seed: number): readonly NodeState[] {
+  const base = (id: number, votedFor: number | null): NodeState => ({
+    ...createNode(id, 3, seed),
+    currentTerm: 1,
+    votedFor,
+    log: [{ term: 1, command: 'a' }],
+    commitIndex: 1,
+    lastApplied: 1,
+    stateMachine: ['a'],
+  })
+  return [
+    { ...base(0, 0), role: 'leader', leaderId: 0, nextIndex: [2, 2, 2], matchIndex: [1, 1, 1] },
+    base(1, 0),
+    // Never heard the request, so never cast a vote in term 1. It is still free to.
+    base(2, null),
+  ]
+}
+
 export const SCENARIOS: readonly ScenarioDefinition[] = [
   {
     id: 'clean-election',
@@ -345,31 +428,23 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     id: 'log-matching-break',
     title: 'Consistency check dimatikan',
     summary:
-      'Ditemukan oleh fuzz suite: partisi, kehilangan pesan, dan dua log yang sepakat di satu (index, term) tetapi berbeda sebelumnya.',
+      'Leader menyelidiki follower pada index yang sudah menyimpang. Dengan consistency check aktif ia ditolak dan memperbaiki; tanpa check itu ia diterima, dan dua log sepakat di satu (index, term) di atas prefix yang berbeda.',
     phenomenon: {
       id:
-        'Ditemukan oleh fuzz suite, bukan dibangun tangan, karena AppendEntries consistency check hanya benar-benar berarti ketika nextIndex kebetulan menunjuk melewati titik divergensi — kebetulan waktu yang sulit diskripkan dan mudah dicari. Dengan check dimatikan, dua log akhirnya memuat entry yang sama pada index dan term yang sama di atas prefix yang berbeda, yaitu Log Matching gagal persis seperti pernyataannya.',
-      en: 'Found by the fuzz suite rather than built by hand, because the AppendEntries consistency check only fails to matter when nextIndex happens to point past a divergence — a coincidence of timing that is hard to script and easy to search for. With the check off, two logs come to hold the same entry at the same index and term over different prefixes, which is Log Matching failing exactly as stated.',
+        'AppendEntries consistency check baru benar-benar terasa ketika nextIndex menunjuk tepat pada index yang sudah menyimpang. Di sini node 4 memegang term 3 di index 3 sementara leader term 4 memegang term 2 di sana. Probe pertama leader jatuh persis di index itu. Dengan check aktif, node 4 menolak, leader menelusuri mundur, dan ekor yang menyimpang ditimpa. Dengan check dimatikan, node 4 menerimanya, leader mengira log mereka cocok, lalu menambahkan entry baru di atas prefix yang berbeda — dan keduanya kini memuat (index 4, term 4) di atas isi yang tidak sama. Lebih buruk lagi, leader menghitung node 4 sebagai replika saat meng-commit.',
+      en: 'The AppendEntries consistency check only bites when nextIndex lands exactly on a divergent index. Here node 4 holds a term-3 entry at index 3 while the term-4 leader holds a term-2 entry there, and the leader\'s first probe falls on precisely that index. With the check on, node 4 rejects, the leader walks back, and the divergent tail is overwritten. With the check off, node 4 accepts, the leader believes their logs agree, and the next entry is appended on top of a different prefix — so both now hold (index 4, term 4) over contents that differ. Worse, the leader counts node 4 as a replica when committing.',
     },
     spec: scenario({
-      seed: 22,
+      seed: 1,
       nodeCount: 5,
-      network: { latencyMin: 14, latencyMax: 53, dropPerMille: 116, duplicatePerMille: 49 },
-      electionTimeoutMin: 150,
-      electionTimeoutMax: 300,
-      heartbeatInterval: 40,
+      network: SCRIPTED_NETWORK,
+      initialNodes: logMatchingStart(1),
       actions: [
-        { at: 991, kind: 'client-request', node: 3, command: 'v5' },
-        { at: 2195, kind: 'partition', partitionOf: [0, 0, 1, 1, 0] },
-        { at: 2763, kind: 'client-request', node: 3, command: 'v4' },
-        { at: 3293, kind: 'client-request', node: 0, command: 'v2' },
-        { at: 10_191, kind: 'client-request', node: 0, command: 'v1' },
-        { at: 10_879, kind: 'partition', partitionOf: [1, 0, 0, 0, 1] },
-        { at: 22_398, kind: 'client-request', node: 4, command: 'v3' },
-        { at: 23_036, kind: 'heal' },
+        { at: 400, kind: 'client-request', node: 0, command: 'd' },
+        { at: 1200, kind: 'client-request', node: 0, command: 'e' },
       ],
-      maxTime: 25_000,
-      maxSteps: 6000,
+      maxTime: 4000,
+      maxSteps: 4000,
     }),
     ablation: { flag: 'appendEntriesConsistencyCheck', breaks: 'log-matching' },
   },
@@ -378,32 +453,23 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
     id: 'double-candidacy',
     title: 'Mencalonkan diri tanpa menaikkan term',
     summary:
-      'Ditemukan oleh fuzz suite: sebuah node yang sudah memilih orang lain mencalonkan diri di term yang sama, menimpa suaranya sendiri.',
+      'Node 1 sudah memilih node 0 di term 1. Ia mencalonkan diri lagi — dengan term dinaikkan itu pemungutan suara baru; tanpa dinaikkan ia menimpa suaranya sendiri di term yang sama.',
     phenomenon: {
       id:
-        'Ditemukan oleh fuzz suite. Menaikkan term saat mencalonkan diri adalah yang membuat sebuah kampanye menjadi pemungutan suara baru. Tanpanya, server yang sudah memilih orang lain berkampanye di dalam term yang sama dan menimpa suaranya sendiri — sehingga satu term bisa memuat dua mayoritas, dan dua leader.',
-      en: "Found by the fuzz suite. Incrementing the term on candidacy is what makes a campaign a new ballot. Without it a server that has already voted for someone else campaigns inside the same term and overwrites its own vote — so one term can hold two majorities, and two leaders.",
+        'Menaikkan term saat mencalonkan diri adalah yang membuat sebuah kampanye menjadi pemungutan suara baru. Node 0 memimpin term 1 dengan suara dari dirinya dan node 1; node 2 tidak pernah menerima permintaan suaranya, jadi votedFor-nya masih kosong. Setelah node 0 terpotong, node 1 mencalonkan diri. Dengan aturan aktif ia pindah ke term 2, dan dua leader itu berada di term berbeda — bukan pelanggaran. Tanpa aturan itu ia berkampanye di dalam term 1, menimpa suaranya sendiri untuk node 0, dan node 2 yang belum memilih memberinya mayoritas kedua di term yang sama.',
+      en: 'Incrementing the term on candidacy is what makes a campaign a new ballot. Node 0 leads term 1 on its own vote and node 1\'s; node 2 never received its RequestVote, so node 2\'s votedFor is still empty. Once node 0 is cut off, node 1 campaigns. With the rule on it moves to term 2, and the two leaders sit in different terms — not a violation. Without it, node 1 campaigns inside term 1, overwrites its own vote for node 0, and node 2 — which has not voted — hands it a second majority in the very same term.',
     },
     spec: scenario({
-      seed: 795,
+      seed: 6,
       nodeCount: 3,
-      network: { latencyMin: 11, latencyMax: 33, dropPerMille: 30, duplicatePerMille: 47 },
-      electionTimeoutMin: 150,
-      electionTimeoutMax: 300,
-      heartbeatInterval: 40,
+      network: SCRIPTED_NETWORK,
+      initialNodes: doubleCandidacyStart(6),
       actions: [
-        { at: 1182, kind: 'client-request', node: 0, command: 'v1' },
-        { at: 1363, kind: 'client-request', node: 1, command: 'v6' },
-        { at: 4159, kind: 'client-request', node: 0, command: 'v4' },
-        { at: 8189, kind: 'partition', partitionOf: [1, 0, 1] },
-        { at: 11_854, kind: 'partition', partitionOf: [0, 0, 1] },
-        { at: 16_717, kind: 'client-request', node: 1, command: 'v5' },
-        { at: 18_348, kind: 'heal' },
-        { at: 18_829, kind: 'client-request', node: 0, command: 'v2' },
-        { at: 20_362, kind: 'client-request', node: 0, command: 'v3' },
+        { at: 300, kind: 'partition', partitionOf: [1, 0, 0] },
+        { at: 4000, kind: 'heal' },
       ],
-      maxTime: 25_000,
-      maxSteps: 6000,
+      maxTime: 7000,
+      maxSteps: 5000,
     }),
     ablation: { flag: 'termIncrementOnCandidacy', breaks: 'election-safety' },
   },

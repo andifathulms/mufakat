@@ -80,3 +80,40 @@ body {
   outline: 2px solid theme('colors.leader');
   outline-offset: 2px;
 }
+
+/* SVG focus rings clip against the viewBox, so give the ring room to sit inside. */
+svg :focus-visible {
+  outline-offset: -2px;
+}
+
+/*
+ * Available to assistive technology, invisible on screen. The ledger's meaning is
+ * carried by colour, weight and position, all of which a screen reader cannot see —
+ * so each cell states its index, term and commit status in words.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* A skip link: hidden until focused, then the first thing a keyboard user meets. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 50;
+}
+
+.skip-link:focus {
+  left: 0;
+  padding: 0.5rem 1rem;
+  background-color: theme('colors.stock.pale');
+  border: 2px solid theme('colors.ink.DEFAULT');
+}

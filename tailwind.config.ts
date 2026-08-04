@@ -22,8 +22,17 @@ const config: Config = {
         ink: {
           DEFAULT: '#1E2321',
           soft: '#4A524D',
-          faint: '#8C948E',
+          // 5.08:1 on stock, 5.47:1 on stock-pale, 4.56:1 on stock-deep. This is the
+          // most-used secondary text colour in the app, so it clears AA for normal
+          // text on every surface it is set on, not just the lightest one.
+          faint: '#5C6560',
+          // Purely decorative ruling: the ledger grid, section separators. The grid's
+          // meaning is carried by cell content, table headers and alignment, not by
+          // the line weight, so this stays light enough to read as a ruled page.
           rule: '#C3CBBE',
+          // Borders of interactive components — buttons, inputs, selects — which need
+          // 3:1 against their background under WCAG 1.4.11. 3.60:1 on stock.
+          edge: '#727E6B',
         },
         follower: '#6B7770',
         candidate: '#B8862F',

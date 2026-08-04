@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { DocumentLanguage } from '@/components/DocumentLanguage'
 import { LOCALES, dictionary, isLocale, type Locale } from '@/lib/i18n'
 
 export function generateStaticParams(): { locale: Locale }[] {
@@ -25,6 +26,10 @@ export default function LocaleLayout({
 
   return (
     <div className="min-h-screen">
+      <DocumentLanguage locale={locale} />
+      <a href="#main" className="skip-link font-sans text-sm">
+        {locale === 'id' ? 'Lompat ke konten utama' : 'Skip to main content'}
+      </a>
       <header className="border-b-2 border-ink">
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-baseline gap-x-6 gap-y-2 px-4 py-3">
           <Link href={`/${locale}`} className="font-serif text-xl leading-none">
@@ -51,7 +56,7 @@ export default function LocaleLayout({
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-[1400px] px-4 py-6">{children}</main>
+      <main id="main" className="mx-auto max-w-[1400px] px-4 py-6">{children}</main>
       <footer className="mt-12 border-t border-ink-rule">
         <div className="mx-auto max-w-[1400px] px-4 py-6 font-sans text-xs text-ink-faint">
           <p>

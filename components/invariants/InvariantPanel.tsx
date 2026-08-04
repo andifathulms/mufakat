@@ -31,8 +31,20 @@ export function InvariantPanel({ violations, upToStep, dict, onJump }: Props) {
     if (!firstByProperty.has(violation.property)) firstByProperty.set(violation.property, violation)
   }
 
+  const newest = sofar[sofar.length - 1]
+
   return (
     <section aria-label={dict.sim.invariants} className="flex flex-col gap-2">
+      {/*
+       * A violation is the one thing in this application that must not be noticed only
+       * by looking. The panel is polite rather than assertive: scrubbing through a
+       * broken run would otherwise interrupt continuously.
+       */}
+      <p aria-live="polite" className="sr-only">
+        {newest === undefined
+          ? dict.invariants.allHolding
+          : `${dict.invariants.broken}: ${dict.invariants.names[newest.property]}. ${newest.summary}`}
+      </p>
       <ul className="flex flex-col">
         {SAFETY_PROPERTIES.map((property) => {
           const violation = firstByProperty.get(property)

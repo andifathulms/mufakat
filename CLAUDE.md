@@ -161,14 +161,24 @@ of all six ablation toggles, and the fuzz suite.
 All five safety properties hold across **10,000 randomized runs** under unmodified
 Raft. The static export builds and has been verified under the production `basePath`.
 
+Every scenario is now hand-built. `initialNodes` is what made the last two possible:
+`log-matching-break` and `double-candidacy` both hinge on a starting position that is
+legal but improbable, and both document the history Raft would have taken to reach it.
+Neither position may violate anything at step 0, and the tests assert that.
+
+**Accessibility.** Contrast was measured, not eyeballed. `ink-faint` was 2.63:1 —
+below AA, and the most-used secondary text colour in the app — and is now 5.08:1.
+Interactive borders moved to a separate `ink-edge` token at 3.60:1, leaving `ink-rule`
+light for the ledger grid, which is decorative. The node-id digit follows its role
+fill and is set at large-text size, because dark ink on the follower slate tops out at
+3.41:1 and the palette is fixed by PRD §10. Skip link, per-locale `<html lang>`,
+`sr-only` cell descriptions in the ledger, a polite live region for violations, and an
+`aria-valuetext` on the scrubber that says what happened rather than a step number.
+
 Not done, and deliberately so:
 
 - **M7 is untouched.** No membership changes, no log compaction. §4 of the PRD is
   binding, and both would double the state space and every fixture at once.
-- **Two ablation scenarios are fuzz-discovered rather than hand-built** —
-  `log-matching-break` and `double-candidacy`. Both say so in their `phenomenon`.
-  They are correct and reproducible, but they are not curated content: the runs reach
-  term 18 and are hard to follow. Hand-built replacements would be an improvement.
 - **The exact Figure 8 lives in `tests/figure8`, driven by a director** that replaces
   only the network, and hits the paper's terms 2/3/4/5 precisely. The playable
   `figure-8` scenario reproduces the same shape in the full simulator but takes an

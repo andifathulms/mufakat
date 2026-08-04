@@ -164,10 +164,20 @@ export function NodeRing({ step, dict, onNodeAction, selected, onSelect }: Props
                 <circle r="30" fill="none" className="stroke-ink" strokeWidth="1" strokeDasharray="2 3" />
               )}
               <NodeGlyph role={node.role} crashed={crashed} />
+              {/* The digit sits on the role fill, so its colour has to follow the
+                  fill's lightness: pale ink on the deep blue leader, dark ink on the
+                  mid-toned follower and the amber candidate. Set at 19px bold, which
+                  is large text by WCAG, so the 3:1 threshold applies — dark ink on
+                  the follower reaches 3.41:1 and cannot do better, the follower slate
+                  being fixed by the palette. The id is also in the group's
+                  aria-label, so nothing depends on reading the digit. */}
               <text
-                y="5"
+                y="6"
                 textAnchor="middle"
-                className="fill-stock-pale text-[15px] font-mono font-bold tabular pointer-events-none"
+                className={[
+                  'text-[19px] font-mono font-bold tabular pointer-events-none',
+                  crashed ? 'fill-ink' : node.role === 'leader' ? 'fill-stock-pale' : 'fill-ink',
+                ].join(' ')}
               >
                 {node.id}
               </text>
@@ -242,14 +252,14 @@ function NodeDetail({
           <span className="flex gap-1">
             <button
               type="button"
-              className="border border-ink-rule px-2 py-0.5 font-sans hover:bg-stock-deep"
+              className="border border-ink-edge px-2 py-0.5 font-sans hover:bg-stock-deep"
               onClick={() => onNodeAction(node.id, crashed ? 'restart' : 'crash')}
             >
               {crashed ? dict.sim.restart : dict.sim.crash}
             </button>
             <button
               type="button"
-              className="border border-ink-rule px-2 py-0.5 font-sans hover:bg-stock-deep"
+              className="border border-ink-edge px-2 py-0.5 font-sans hover:bg-stock-deep"
               onClick={() => onNodeAction(node.id, 'isolate')}
             >
               {dict.sim.isolate}
