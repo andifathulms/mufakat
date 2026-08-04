@@ -154,4 +154,24 @@ RaftScope and the Raft paper are linked prominently and warmly — RaftScope was
 
 ## Current state
 
-M0 — not yet scaffolded. Next: static export deploying to Pages, then the virtual-clock scheduler with a proven-deterministic event queue. **No Raft code until the scheduler replays byte-identically.**
+M0–M6 built. `pnpm test:run` is green: 134 tests, including 49 Figure 2 conformance
+fixtures, the panel-by-panel Figure 8 reproduction in both directions, both directions
+of all six ablation toggles, and the fuzz suite.
+
+All five safety properties hold across **10,000 randomized runs** under unmodified
+Raft. The static export builds and has been verified under the production `basePath`.
+
+Not done, and deliberately so:
+
+- **M7 is untouched.** No membership changes, no log compaction. §4 of the PRD is
+  binding, and both would double the state space and every fixture at once.
+- **Two ablation scenarios are fuzz-discovered rather than hand-built** —
+  `log-matching-break` and `double-candidacy`. Both say so in their `phenomenon`.
+  They are correct and reproducible, but they are not curated content: the runs reach
+  term 18 and are hard to follow. Hand-built replacements would be an improvement.
+- **The exact Figure 8 lives in `tests/figure8`, driven by a director** that replaces
+  only the network, and hits the paper's terms 2/3/4/5 precisely. The playable
+  `figure-8` scenario reproduces the same shape in the full simulator but takes an
+  extra election or two to get there, because the scheduler will not be told who wins.
+- **`tests/fuzz/regressions.test.ts` has no entries yet**, because no fuzz failure has
+  occurred. It exists so the next one has an obvious home.
