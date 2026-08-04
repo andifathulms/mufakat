@@ -69,7 +69,15 @@ function observeTerm(
   config: RaftConfig,
 ): { state: NodeState; timers: readonly TimerRequest[] } {
   if (term <= state.currentTerm) return { state, timers: [] }
-  if (!stepDownOnHigherTerm(config.flags)) return { state, timers: [] }
+
+  // The rule has two halves: adopt the term, and convert to follower. Only the second
+  // is ablatable. Suppressing term adoption as well would not break a safety property
+  // — it would deadlock elections, because every server would keep the vote it cast
+  // in its old term forever and no candidate could ever assemble a majority again.
+  // That is a liveness failure, and it would teach the wrong lesson about what this
+  // rule is for. Ablating the conversion alone leaves a superseded leader running in
+  // the *new* term alongside the real one, which is precisely two leaders in a term.
+  const revert = stepDownOnHigherTerm(config.flags)
 
   const wasFollower = state.role === 'follower'
   let node: NodeState = {
@@ -77,9 +85,13 @@ function observeTerm(
     currentTerm: term,
     // A new term is a new ballot: the vote record from the old term does not carry.
     votedFor: null,
-    role: 'follower',
-    leaderId: null,
+    role: revert ? 'follower' : state.role,
+    leaderId: revert ? null : state.leaderId,
     votesGranted: new Array<boolean>(config.nodeCount).fill(false),
+  }
+  if (!revert) {
+    // Still leading, or still campaigning, in a term it has just learned about.
+    return { state: node, timers: [] }
   }
   if (wasFollower) {
     // Already a follower with a running election timer. Figure 2 resets the timer only

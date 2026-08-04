@@ -12,7 +12,7 @@
 import { check, EMPTY_CHECKER_STATE } from '@/lib/invariants/checker'
 import type { CheckerState, ClusterSnapshot, Violation } from '@/lib/invariants/types'
 import { createNode, step as raftStep } from '@/lib/raft/node'
-import { resetElectionTimer } from '@/lib/raft/timers'
+import { resetElectionTimer, resetHeartbeatTimer } from '@/lib/raft/timers'
 import { UNMODIFIED_RAFT, type AblationFlags } from '@/lib/raft/rules'
 import type { Message, NodeId, NodeState, RaftConfig, TimerRequest } from '@/lib/raft/types'
 import { EventQueue } from './clock'
@@ -49,6 +49,17 @@ export interface Scenario {
   /** Event budget. Bounded runs keep fuzzing and trace memory finite. */
   readonly maxSteps: number
   readonly maxTime: number
+  /**
+   * Start from this cluster state instead of a fresh one.
+   *
+   * Some scenarios worth showing begin in the middle of a history — Figure 8 opens on
+   * a leader that has already partially replicated an entry, and building up to that
+   * position from an empty cluster would take a hundred uninteresting steps and would
+   * not be reproducible anyway. This is a scenario-schema affordance, not a change to
+   * the algorithm: the state machine cannot tell the difference between a state it
+   * reached and a state it was handed.
+   */
+  readonly initialNodes?: readonly NodeState[]
 }
 
 export const DEFAULT_SCENARIO: Omit<Scenario, 'seed'> = {
@@ -90,7 +101,7 @@ function toRaftConfig(spec: Scenario): RaftConfig {
  * Convert simulation state into the checker's own shapes. This is the only place the
  * two sides meet, and they meet as plain data.
  */
-function snapshotOf(
+export function snapshotOf(
   nodes: readonly NodeState[],
   crashed: readonly boolean[],
   stepIndex: number,
@@ -129,9 +140,15 @@ class Simulation {
   constructor(spec: Scenario) {
     this.spec = spec
     this.raft = toRaftConfig(spec)
-    this.nodes = Array.from({ length: spec.nodeCount }, (_, id) =>
+    const fresh = Array.from({ length: spec.nodeCount }, (_, id) =>
       createNode(id, spec.nodeCount, spec.seed),
     )
+    if (spec.initialNodes !== undefined && spec.initialNodes.length !== spec.nodeCount) {
+      throw new Error(
+        `initialNodes has ${spec.initialNodes.length} entries but nodeCount is ${spec.nodeCount}`,
+      )
+    }
+    this.nodes = spec.initialNodes === undefined ? fresh : [...spec.initialNodes]
     this.crashed = new Array<boolean>(spec.nodeCount).fill(false)
     this.network = fullyConnected(spec.nodeCount)
     // Stream 0 belongs to the network; nodes take streams 1..n.
@@ -139,12 +156,20 @@ class Simulation {
   }
 
   run(): Trace {
-    // Startup, in a fixed order: every node arms its election timer, ascending by id,
-    // then the scripted actions are queued. Equal-timestamp ties therefore resolve
-    // the same way on every machine.
+    // Startup, in a fixed order: every node arms a timer, ascending by id, then the
+    // scripted actions are queued. Equal-timestamp ties therefore resolve the same
+    // way on every machine.
     for (let id = 0; id < this.spec.nodeCount; id += 1) {
       const node = this.nodes[id]
       if (node === undefined) continue
+      if (node.role === 'leader') {
+        // A scenario may open on an already-elected leader. It heartbeats; it has no
+        // election timeout.
+        const armed = resetHeartbeatTimer(node, this.raft)
+        this.nodes[id] = armed.state
+        this.queue.schedule(armed.timer.delay, { kind: 'timer', node: id, timer: armed.timer })
+        continue
+      }
       const armed = resetElectionTimer(node, this.raft)
       this.nodes[id] = armed.state
       this.queue.schedule(armed.timer.delay, { kind: 'timer', node: id, timer: armed.timer })

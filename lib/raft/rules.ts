@@ -101,7 +101,7 @@ export const RULE_DESCRIPTORS: readonly RuleDescriptor[] = [
     paperSection: '§5.3',
     figure2: 'AppendEntries RPC, receiver rule 2',
     callSite: 'lib/raft/replication.ts — handleAppendEntries',
-    scenarioId: 'log-divergence-repair',
+    scenarioId: 'log-matching-break',
   },
   {
     flag: 'termIncrementOnCandidacy',
@@ -109,7 +109,7 @@ export const RULE_DESCRIPTORS: readonly RuleDescriptor[] = [
     paperSection: '§5.2',
     figure2: 'Rules for Servers, Candidates, rule 1',
     callSite: 'lib/raft/election.ts — startElection',
-    scenarioId: 'split-vote',
+    scenarioId: 'double-candidacy',
   },
   {
     flag: 'stepDownOnHigherTerm',
@@ -179,8 +179,13 @@ export function incrementTermOnCandidacy(flags: AblationFlags): boolean {
 
 /**
  * Consulted in `lib/raft/node.ts — observeTerm`.
- * Off: a stale leader that has been superseded keeps its role and its term, so it
- * continues to act as leader alongside the real one.
+ * Off: a superseded leader adopts the higher term but keeps its role, so it goes on
+ * issuing AppendEntries as leader of the same term as the server that deposed it.
+ *
+ * Only the conversion is ablated, not the term adoption. Suppressing both would
+ * deadlock elections rather than break a safety property — every server would hold
+ * the vote it cast in its old term forever — and that would teach the wrong lesson
+ * about what this rule defends.
  */
 export function stepDownOnHigherTerm(flags: AblationFlags): boolean {
   return flags.stepDownOnHigherTerm
