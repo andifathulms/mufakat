@@ -202,7 +202,7 @@ export function NodeRing({ step, dict, onNodeAction, selected, onSelect }: Props
                   textAnchor="middle"
                   className="fill-ink-faint text-[9px] font-mono pointer-events-none"
                 >
-                  grup {step.network.partitionOf[node.id]}
+                  {dict.sim.partitionGroup} {step.network.partitionOf[node.id]}
                 </text>
               )}
             </g>

@@ -1,14 +1,14 @@
 /**
- * Indonesian first, English second.
+ * English first, Indonesian second.
  *
  * Algorithm terms stay in English throughout — *term*, *leader*, *commit index*,
  * *AppendEntries*, *log* — because a reader should recognise them in the paper
  * afterwards. Only the interface and the explanation are translated.
  */
 
-export const LOCALES = ['id', 'en'] as const
+export const LOCALES = ['en', 'id'] as const
 export type Locale = (typeof LOCALES)[number]
-export const DEFAULT_LOCALE: Locale = 'id'
+export const DEFAULT_LOCALE: Locale = 'en'
 
 export function isLocale(value: string): value is Locale {
   return (LOCALES as readonly string[]).includes(value)
@@ -101,6 +101,7 @@ interface Dictionary {
     readonly seed: string
     readonly rerun: string
     readonly configuration: string
+    readonly partitionGroup: string
     readonly addServer: string
     readonly removeServer: string
   }
@@ -261,6 +262,7 @@ const id: Dictionary = {
     seed: 'Seed',
     rerun: 'Jalankan ulang',
     configuration: 'Konfigurasi',
+    partitionGroup: 'grup',
     addServer: 'Tambahkan',
     removeServer: 'Keluarkan',
   },
@@ -465,6 +467,7 @@ const en: Dictionary = {
     seed: 'Seed',
     rerun: 'Re-run',
     configuration: 'Configuration',
+    partitionGroup: 'group',
     addServer: 'Add',
     removeServer: 'Remove',
   },

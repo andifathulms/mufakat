@@ -157,7 +157,7 @@ export function Simulator({ locale }: { locale: Locale }) {
             >
               {SCENARIOS.map((entry) => (
                 <option key={entry.id} value={entry.id}>
-                  {entry.title}
+                  {entry.title[locale]}
                 </option>
               ))}
             </select>
@@ -208,7 +208,7 @@ export function Simulator({ locale }: { locale: Locale }) {
 
         <div className="mt-3 border-t border-ink-rule pt-3">
           <p className="max-w-prose font-sans text-label leading-relaxed text-ink-soft">
-            {definition.summary}
+            {definition.summary[locale]}
           </p>
           <p className="mt-1.5 max-w-prose font-sans text-micro leading-relaxed text-ink-faint">
             <span className="font-medium">{dict.scenarios.phenomenon}: </span>

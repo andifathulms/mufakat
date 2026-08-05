@@ -39,16 +39,29 @@ const LOSSY_NETWORK: NetworkConfig = {
   duplicatePerMille: 20,
 }
 
+/**
+ * Text shown to the reader, in both interface languages.
+ *
+ * Every reader-facing string on a scenario is this shape. `title` and `summary` used
+ * to be bare strings holding Indonesian, which meant the English scenario library
+ * rendered Indonesian titles and summaries above English phenomena — the one field
+ * that had been localised. Making the type demand both halves is what stops that
+ * happening again: a new scenario cannot compile with only one language.
+ *
+ * Algorithm terms stay in English on both sides, as everywhere else.
+ */
+export interface Localized {
+  readonly id: string
+  readonly en: string
+}
+
 export interface ScenarioDefinition {
   readonly id: string
-  readonly title: string
-  /** One-line description, Indonesian. Algorithm terms stay in English. */
-  readonly summary: string
-  /**
-   * The single named thing this scenario demonstrates. Bilingual: it is shown to the
-   * reader, and Indonesian is the language of explanation.
-   */
-  readonly phenomenon: { readonly id: string; readonly en: string }
+  readonly title: Localized
+  /** One line on what the scenario sets up. */
+  readonly summary: Localized
+  /** The single named thing this scenario demonstrates. */
+  readonly phenomenon: Localized
   readonly spec: Scenario
   /**
    * The rule to switch off to see this scenario's point, and the property that then
@@ -190,9 +203,14 @@ export function doubleCandidacyStart(seed: number): readonly NodeState[] {
 export const SCENARIOS: readonly ScenarioDefinition[] = [
   {
     id: 'clean-election',
-    title: 'Pemilihan bersih',
-    summary:
-      'Lima node, jaringan yang kehilangan sebagian pesan. Satu leader terpilih, lalu entry direplikasi dan commit.',
+    title: {
+      id: 'Pemilihan bersih',
+      en: 'A clean election',
+    },
+    summary: {
+      id: 'Lima node, jaringan yang kehilangan sebagian pesan. Satu leader terpilih, lalu entry direplikasi dan commit.',
+      en: 'Five nodes on a network that loses some messages. A leader is elected, then entries replicate and commit.',
+    },
     phenomenon: {
       id:
         'Leader terpilih dari keadaan awal dan entry dari klien berhasil commit, di bawah jaringan yang kehilangan pesan — kasus biasa, yang layak dilihat sebelum apa pun dirusak.',
@@ -214,9 +232,14 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
 
   {
     id: 'split-vote',
-    title: 'Split vote',
-    summary:
-      'Election timeout yang hampir seragam membuat beberapa node mencalonkan diri bersamaan. Tidak ada tiebreak — jitter timeout yang menyelesaikannya.',
+    title: {
+      id: 'Split vote',
+      en: 'Split vote',
+    },
+    summary: {
+      id: 'Election timeout yang hampir seragam membuat beberapa node mencalonkan diri bersamaan. Tidak ada tiebreak — jitter timeout yang menyelesaikannya.',
+      en: 'Near-uniform election timeouts make several nodes campaign at once. There is no tiebreak — the timeout jitter is what resolves it.',
+    },
     phenomenon: {
       id:
         'Dengan randomisasi election timeout dipersempit hampir habis, para candidate bertabrakan dan suara terbelah. Raft tidak punya aturan tiebreak: perpecahan itu selesai semata-mata karena putaran timeout berikutnya berbeda. Untuk inilah randomisasi ada.',
@@ -239,9 +262,14 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
 
   {
     id: 'partition-stranded-leader',
-    title: 'Leader terdampar di minoritas',
-    summary:
-      'Leader terpotong ke sisi minoritas. Ia tetap mengira dirinya leader, tetapi tidak bisa commit apa pun; sisi mayoritas memilih leader baru di term yang lebih tinggi.',
+    title: {
+      id: 'Leader terdampar di minoritas',
+      en: 'A leader stranded in the minority',
+    },
+    summary: {
+      id: 'Leader terpotong ke sisi minoritas. Ia tetap mengira dirinya leader, tetapi tidak bisa commit apa pun; sisi mayoritas memilih leader baru di term yang lebih tinggi.',
+      en: 'A leader is cut off on the minority side. It still believes it leads, but cannot commit anything; the majority side elects a new leader in a higher term.',
+    },
     phenomenon: {
       id:
         'Leader yang terpotong ke minoritas tetap mengira dirinya memimpin, dan tetap menerima entry dari klien — tetapi tidak akan pernah bisa meng-commit-nya, karena commit butuh mayoritas. Sisi mayoritas memilih leader baru di term yang lebih tinggi, dan ketika partisi tersambung kembali leader basi itu mengetahui term tersebut lalu mundur. Mematikan aturan step-down meninggalkan dua leader dalam satu term.',
@@ -266,9 +294,14 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
 
   {
     id: 'log-divergence-repair',
-    title: 'Divergensi log dan perbaikannya',
-    summary:
-      'Dua sisi partisi menerima entry berbeda pada index yang sama. Setelah heal, leader baru menelusuri nextIndex mundur sampai log cocok, lalu menimpa ekor yang menyimpang.',
+    title: {
+      id: 'Divergensi log dan perbaikannya',
+      en: 'Log divergence, and its repair',
+    },
+    summary: {
+      id: 'Dua sisi partisi menerima entry berbeda pada index yang sama. Setelah heal, leader baru menelusuri nextIndex mundur sampai log cocok, lalu menimpa ekor yang menyimpang.',
+      en: 'Both sides of a partition accept different entries at the same index. After the heal, the new leader walks nextIndex back until the logs agree, then overwrites the divergent tail.',
+    },
     phenomenon: {
       id:
         'Leader lama, terdampar bersama satu follower, menambahkan entry yang tidak akan pernah bisa commit. Mayoritas memilih leader baru yang menambahkan entry berbeda pada index yang sama. Setelah partisi sembuh, AppendEntries consistency check gagal, leader menelusuri nextIndex mundur sampai kedua log bertemu, lalu menimpa ekor yang menyimpang. Inilah tampilan ciri khasnya: baris yang gagal sejajar, lalu sejajar kembali.',
@@ -295,9 +328,14 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
 
   {
     id: 'leader-crash-mid-replication',
-    title: 'Leader jatuh di tengah replikasi',
-    summary:
-      'Leader menerima entry lalu jatuh sebelum mayoritas menyimpannya. Leader berikutnya memutuskan nasib entry itu.',
+    title: {
+      id: 'Leader jatuh di tengah replikasi',
+      en: 'A leader crashes mid-replication',
+    },
+    summary: {
+      id: 'Leader menerima entry lalu jatuh sebelum mayoritas menyimpannya. Leader berikutnya memutuskan nasib entry itu.',
+      en: 'A leader accepts an entry and crashes before a majority has stored it. The next leader decides that entry’s fate.',
+    },
     phenomenon: {
       id:
         'Leader menerima sebuah entry lalu jatuh sebelum mayoritas menyimpannya. Entry itu tidak committed dan juga tidak dibuang: apakah ia bertahan sepenuhnya bergantung pada apakah leader berikutnya kebetulan memilikinya — dan itulah yang diputuskan oleh election restriction.',
@@ -323,9 +361,14 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
 
   {
     id: 'election-restriction-overwrite',
-    title: 'Kandidat dengan log tertinggal',
-    summary:
-      'Satu node terisolasi selama cluster meng-commit beberapa entry. Term-nya menanjak, lognya tidak. Election restriction yang menahannya agar tidak pernah menang.',
+    title: {
+      id: 'Kandidat dengan log tertinggal',
+      en: 'A candidate whose log has fallen behind',
+    },
+    summary: {
+      id: 'Satu node terisolasi selama cluster meng-commit beberapa entry. Term-nya menanjak, lognya tidak. Election restriction yang menahannya agar tidak pernah menang.',
+      en: 'One node is isolated while the cluster commits several entries. Its term climbs, its log does not. The election restriction is what keeps it from ever winning.',
+    },
     phenomenon: {
       id:
         'Node yang terisolasi mencalonkan diri berkali-kali, sehingga term-nya menanjak jauh di atas yang lain sementara lognya tetap pendek. Ketika partisi sembuh, term tingginya memaksa election baru — dan election restriction adalah satu-satunya yang mencegahnya menang dengan log yang kehilangan entry yang sudah committed. Matikan restriction itu dan entry tersebut hilang.',
@@ -351,9 +394,14 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
 
   {
     id: 'figure-8',
-    title: 'Figure 8',
-    summary:
-      'Skenario dari makalah, dimainkan langsung. Sebuah entry dari term lama tersimpan di mayoritas — dan masih bisa ditimpa.',
+    title: {
+      id: 'Figure 8',
+      en: 'Figure 8',
+    },
+    summary: {
+      id: 'Skenario dari makalah, dimainkan langsung. Sebuah entry dari term lama tersimpan di mayoritas — dan masih bisa ditimpa.',
+      en: 'The scenario from the paper, played live. An entry from an older term is stored on a majority — and can still be overwritten.',
+    },
     phenomenon: {
       id:
         'Figure 8 dari makalah, dimainkan di dalam simulator. Dimulai dari panel (a): S1 memimpin term 2 dan baru mereplikasi index 2 ke S2 saja. S1 jatuh, S5 memenangkan term 3 dan menulis entry berbeda di index 2, S1 kembali dan memenangkan term 4 lalu mendorong index 2 miliknya ke mayoritas — dan entry itu tetap belum aman. Matikan current-term commit rule dan ia dinyatakan committed, lalu ditimpa. Reproduksi persis panel demi panel ada di tests/figure8.',
@@ -402,9 +450,14 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
 
   {
     id: 'double-vote-restart',
-    title: 'Memilih dua kali setelah restart',
-    summary:
-      'Satu node memberi suara, jatuh, lalu hidup kembali. Karena votedFor persistent, ia menolak memilih lagi di term yang sama.',
+    title: {
+      id: 'Memilih dua kali setelah restart',
+      en: 'Voting twice after a restart',
+    },
+    summary: {
+      id: 'Satu node memberi suara, jatuh, lalu hidup kembali. Karena votedFor persistent, ia menolak memilih lagi di term yang sama.',
+      en: 'A node casts a vote, crashes, and comes back. Because votedFor is persistent, it refuses to vote again in the same term.',
+    },
     phenomenon: {
       id:
         'Seorang follower memberi suara, jatuh, lalu hidup kembali. Karena votedFor adalah persistent state, ia mengingatnya dan menolak memilih untuk kedua kalinya di term yang sama. Buat votedFor volatile dan node yang sama menyerahkan mayoritas yang dibutuhkan candidate kedua, menghasilkan dua leader dalam satu term.',
@@ -431,9 +484,14 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
 
   {
     id: 'membership-change',
-    title: 'Mengganti anggota cluster',
-    summary:
-      'Cluster {0,1,2} berubah menjadi {2,3,4}. Perubahan lewat konfigurasi gabungan C-old,new; tanpa itu kedua sisi bisa memilih leader sendiri-sendiri di term yang sama.',
+    title: {
+      id: 'Mengganti anggota cluster',
+      en: 'Changing the cluster’s members',
+    },
+    summary: {
+      id: 'Cluster {0,1,2} berubah menjadi {2,3,4}. Perubahan lewat konfigurasi gabungan C-old,new; tanpa itu kedua sisi bisa memilih leader sendiri-sendiri di term yang sama.',
+      en: 'The cluster {0,1,2} becomes {2,3,4}. The change passes through the joint configuration C-old,new; without it each side could elect its own leader in the same term.',
+    },
     phenomenon: {
       id:
         'Cluster tidak bisa berpindah langsung dari C-old ke C-new, karena tidak ada satu saat pun di mana semua server berpindah bersamaan — untuk sesaat sebagian percaya C-old dan sebagian C-new. Di sini {0,1} adalah mayoritas dari {0,1,2} dan {3,4} adalah mayoritas dari {2,3,4}, dan keduanya tidak beririsan: itulah Figure 10. Dengan joint consensus, konfigurasi peralihan C-old,new menuntut mayoritas dari *kedua* himpunan sekaligus, jadi ketika partisi memotong cluster tidak ada sisi yang bisa menang — cluster berhenti, dan itu benar. Matikan aturannya dan kedua sisi memilih leader di term yang sama.',
@@ -463,9 +521,14 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
 
   {
     id: 'log-compaction',
-    title: 'Snapshot untuk follower yang tertinggal',
-    summary:
-      'Satu follower terputus selama cluster terus meng-commit. Leader sudah membuang entry yang dibutuhkannya, jadi AppendEntries tidak bisa mengejarnya — yang dikirim adalah snapshot.',
+    title: {
+      id: 'Snapshot untuk follower yang tertinggal',
+      en: 'A snapshot for a follower left behind',
+    },
+    summary: {
+      id: 'Satu follower terputus selama cluster terus meng-commit. Leader sudah membuang entry yang dibutuhkannya, jadi AppendEntries tidak bisa mengejarnya — yang dikirim adalah snapshot.',
+      en: 'One follower is cut off while the cluster keeps committing. The leader has already discarded the entries it needs, so AppendEntries cannot catch it up — a snapshot is sent instead.',
+    },
     phenomenon: {
       id:
         'Setiap server membuat snapshot sendiri-sendiri begitu ia sudah menerapkan cukup banyak entry, lalu membuang entry di bawahnya — hanya sampai lastApplied, tidak pernah lebih. Ketika partisi sembuh, node 4 begitu tertinggal sehingga nextIndex untuk dirinya jatuh ke dalam rentang yang sudah dibuang leader. Pada titik itu AppendEntries tidak bisa lagi menolongnya: entry yang diperlukan sudah tidak ada. Leader mengirim InstallSnapshot, dan node 4 mengganti state machine-nya sekaligus. Di ledger, baris di bawah titik snapshot berubah menjadi arsir — bukan kosong, karena entry itu tidak hilang, melainkan sudah terlipat ke dalam state.',
@@ -497,9 +560,14 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
 
   {
     id: 'log-matching-break',
-    title: 'Consistency check dimatikan',
-    summary:
-      'Leader menyelidiki follower pada index yang sudah menyimpang. Dengan consistency check aktif ia ditolak dan memperbaiki; tanpa check itu ia diterima, dan dua log sepakat di satu (index, term) di atas prefix yang berbeda.',
+    title: {
+      id: 'Consistency check dimatikan',
+      en: 'The consistency check, switched off',
+    },
+    summary: {
+      id: 'Leader menyelidiki follower pada index yang sudah menyimpang. Dengan consistency check aktif ia ditolak dan memperbaiki; tanpa check itu ia diterima, dan dua log sepakat di satu (index, term) di atas prefix yang berbeda.',
+      en: 'The leader probes a follower at an index that has already diverged. With the consistency check on it is rejected and repairs; with it off it is accepted, and two logs agree at one (index, term) on top of different prefixes.',
+    },
     phenomenon: {
       id:
         'AppendEntries consistency check baru benar-benar terasa ketika nextIndex menunjuk tepat pada index yang sudah menyimpang. Di sini node 4 memegang term 3 di index 3 sementara leader term 4 memegang term 2 di sana. Probe pertama leader jatuh persis di index itu. Dengan check aktif, node 4 menolak, leader menelusuri mundur, dan ekor yang menyimpang ditimpa. Dengan check dimatikan, node 4 menerimanya, leader mengira log mereka cocok, lalu menambahkan entry baru di atas prefix yang berbeda — dan keduanya kini memuat (index 4, term 4) di atas isi yang tidak sama. Lebih buruk lagi, leader menghitung node 4 sebagai replika saat meng-commit.',
@@ -522,9 +590,14 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
 
   {
     id: 'double-candidacy',
-    title: 'Mencalonkan diri tanpa menaikkan term',
-    summary:
-      'Node 1 sudah memilih node 0 di term 1. Ia mencalonkan diri lagi — dengan term dinaikkan itu pemungutan suara baru; tanpa dinaikkan ia menimpa suaranya sendiri di term yang sama.',
+    title: {
+      id: 'Mencalonkan diri tanpa menaikkan term',
+      en: 'Campaigning without incrementing the term',
+    },
+    summary: {
+      id: 'Node 1 sudah memilih node 0 di term 1. Ia mencalonkan diri lagi — dengan term dinaikkan itu pemungutan suara baru; tanpa dinaikkan ia menimpa suaranya sendiri di term yang sama.',
+      en: 'Node 1 has already voted for node 0 in term 1. It campaigns again — with the term incremented that is a new ballot; without it, it overwrites its own vote in the same term.',
+    },
     phenomenon: {
       id:
         'Menaikkan term saat mencalonkan diri adalah yang membuat sebuah kampanye menjadi pemungutan suara baru. Node 0 memimpin term 1 dengan suara dari dirinya dan node 1; node 2 tidak pernah menerima permintaan suaranya, jadi votedFor-nya masih kosong. Setelah node 0 terpotong, node 1 mencalonkan diri. Dengan aturan aktif ia pindah ke term 2, dan dua leader itu berada di term berbeda — bukan pelanggaran. Tanpa aturan itu ia berkampanye di dalam term 1, menimpa suaranya sendiri untuk node 0, dan node 2 yang belum memilih memberinya mayoritas kedua di term yang sama.',

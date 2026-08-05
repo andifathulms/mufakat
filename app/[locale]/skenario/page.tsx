@@ -44,9 +44,9 @@ export default function ScenariosPage({ params }: { params: { locale: string } }
             entry.ablation === undefined ? null : descriptorFor(entry.ablation.flag)
           return (
             <li key={entry.id} className="card flex flex-col p-5">
-              <h2 className="font-serif text-xl leading-snug">{entry.title}</h2>
+              <h2 className="font-serif text-xl leading-snug">{entry.title[locale]}</h2>
               <p className="mt-0.5 font-mono text-micro text-ink-faint">{entry.id}</p>
-              <p className="mt-2.5 font-sans text-body leading-relaxed">{entry.summary}</p>
+              <p className="mt-2.5 font-sans text-body leading-relaxed">{entry.summary[locale]}</p>
 
               <div className="mt-3.5 border-t border-ink-rule pt-2.5">
                 <h3 className="field-label">{dict.scenarios.phenomenon}</h3>

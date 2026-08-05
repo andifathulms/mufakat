@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { configurationOf, entryAt, heldEntries, lastLogIndex } from '@/lib/raft/log'
 import { members } from '@/lib/raft/configuration'
 import { SCENARIOS, ablated, scenarioForFlag } from '@/data/scenarios'
+import { LOCALES } from '@/lib/i18n'
 import {
   ABLATION_FLAG_NAMES,
   RULE_DESCRIPTORS,
@@ -95,12 +96,28 @@ describe('the scenario library', () => {
     expect(new Set(ids).size).toBe(ids.length)
     for (const entry of SCENARIOS) {
       expect(entry.id).toMatch(/^[a-z0-9-]+$/)
-      expect(entry.title.length).toBeGreaterThan(3)
-      expect(entry.summary.length).toBeGreaterThan(20)
-      // The phenomenon is the one thing the scenario exists to show. It is not
-      // decoration: a scenario without one has not been curated.
-      expect(entry.phenomenon.id.length).toBeGreaterThan(60)
-      expect(entry.phenomenon.en.length).toBeGreaterThan(60)
+      // Every reader-facing string exists in both interface languages. `title` and
+      // `summary` were once bare Indonesian strings, so the English scenario library
+      // rendered Indonesian titles above English phenomena. Asserting both halves of
+      // every localised field is what keeps a half-translated scenario from shipping.
+      for (const locale of LOCALES) {
+        expect(entry.title[locale].length, `${entry.id} title ${locale}`).toBeGreaterThan(3)
+        expect(entry.summary[locale].length, `${entry.id} summary ${locale}`).toBeGreaterThan(20)
+        // The phenomenon is the one thing the scenario exists to show. It is not
+        // decoration: a scenario without one has not been curated.
+        expect(
+          entry.phenomenon[locale].length,
+          `${entry.id} phenomenon ${locale}`,
+        ).toBeGreaterThan(60)
+      }
+      // The two languages must actually differ, or a field has been left untranslated
+      // by pasting one language into both halves. `Figure 8` and `Split vote` are
+      // genuinely the same in both, being algorithm terms, so titles are exempt.
+      expect(entry.summary.id, `${entry.id} summary untranslated`).not.toBe(entry.summary.en)
+      expect(
+        entry.phenomenon.id,
+        `${entry.id} phenomenon untranslated`,
+      ).not.toBe(entry.phenomenon.en)
     }
   })
 
