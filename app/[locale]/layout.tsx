@@ -5,6 +5,9 @@ import { MakerSignature } from '@/components/MakerSignature'
 import { SiteNav } from '@/components/SiteNav'
 import { LOCALES, dictionary, isLocale, type Locale } from '@/lib/i18n'
 
+/** Static export under a project page: asset URLs are written with the basePath. */
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
+
 export function generateStaticParams(): { locale: Locale }[] {
   return LOCALES.map((locale) => ({ locale }))
 }
@@ -36,7 +39,22 @@ export default function LocaleLayout({
           scenario library halfway down it is a small, avoidable annoyance. */}
       <header className="sticky top-0 z-30 border-b-2 border-ink bg-stock/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 sm:px-6">
-          <Link href={`/${locale}`} className="flex items-baseline gap-2.5">
+          <Link href={`/${locale}`} className="flex items-center gap-2.5">
+            {/*
+             * The small-size form of the mark: three nodes, no orbit ring. The brand
+             * rules drop the ring and the fifth node below 40px, because at this size
+             * five nodes blur into a smudge — so this is the same file the favicon
+             * uses, not a scaled-down master. Decorative: the wordmark beside it is
+             * the accessible name, so the alt is empty rather than duplicating it.
+             */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`${BASE_PATH}/favicon.svg`}
+              alt=""
+              width={26}
+              height={26}
+              className="shrink-0"
+            />
             <span className="font-serif text-xl leading-none">Raft Simulator</span>
             <span className="hidden font-sans text-micro text-ink-faint sm:inline">
               {dict.nav.tagline}

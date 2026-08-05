@@ -136,6 +136,25 @@ self.addEventListener('fetch', (event) => {
 })
 `
 
+/*
+ * The web app manifest is a static file, so unlike everything else here its basePath
+ * is written by hand. Renaming the repository would leave it pointing at the old path
+ * — the app would still load, and would quietly stop being installable, which is
+ * exactly the kind of failure nobody notices for months. Checked rather than trusted.
+ */
+const MANIFEST_NAME = 'manifest.webmanifest'
+if (files.includes(MANIFEST_NAME)) {
+  const manifestJson = JSON.parse(await readFile(join(ROOT, MANIFEST_NAME), 'utf8'))
+  const paths = [manifestJson.start_url, manifestJson.scope, ...manifestJson.icons.map((i) => i.src)]
+  const stray = paths.filter((path) => !String(path).startsWith(`${BASE_PATH}/`))
+  if (stray.length > 0) {
+    console.error(
+      `${MANIFEST_NAME} does not agree with basePath ${BASE_PATH}: ${stray.join(', ')}`,
+    )
+    process.exit(1)
+  }
+}
+
 await writeFile(join(ROOT, SW_NAME), worker, 'utf8')
 const bytes = (await stat(join(ROOT, SW_NAME))).size
 console.log(

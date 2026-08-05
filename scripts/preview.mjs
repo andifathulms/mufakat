@@ -19,6 +19,11 @@ const TYPES = {
   '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8',
   '.ico': 'image/x-icon',
+  '.png': 'image/png',
+  // Served as octet-stream a browser will not treat it as a manifest at all, so the
+  // install prompt silently never appears — and this server exists to catch exactly
+  // that class of thing before it reaches Pages.
+  '.webmanifest': 'application/manifest+json',
 }
 
 async function resolveFile(pathname) {
