@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { DocumentLanguage } from '@/components/DocumentLanguage'
+import { MakerSignature } from '@/components/MakerSignature'
 import { SiteNav } from '@/components/SiteNav'
 import { LOCALES, dictionary, isLocale, type Locale } from '@/lib/i18n'
 
@@ -47,9 +48,12 @@ export default function LocaleLayout({
       <main id="main" className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6">
         {children}
       </main>
+      {/* One seam. The citation and the maker's mark sit at opposite ends of the same
+          bar rather than in stacked sections with a rule between them — a personal
+          credit is not a second legal notice and should not be filed as one. */}
       <footer className="mt-16 border-t border-ink-rule">
-        <div className="mx-auto flex max-w-[1400px] flex-col gap-2 px-4 py-8 font-sans text-micro leading-relaxed text-ink-faint sm:px-6">
-          <p className="max-w-3xl">
+        <div className="mx-auto flex max-w-[1400px] flex-col gap-6 px-4 py-8 sm:flex-row sm:items-end sm:justify-between sm:gap-10 sm:px-6">
+          <p className="max-w-3xl font-sans text-micro leading-relaxed text-ink-faint">
             {locale === 'id' ? 'Sumber normatif' : 'Normative source'}:{' '}
             <a
               href="https://raft.github.io/raft.pdf"
@@ -66,6 +70,7 @@ export default function LocaleLayout({
             </a>
             {locale === 'id' ? ', oleh penulis makalahnya.' : ', by the paper’s own author.'}
           </p>
+          <MakerSignature locale={locale} />
         </div>
       </footer>
     </div>
