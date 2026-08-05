@@ -28,14 +28,14 @@ const sans = IBM_Plex_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'Mufakat — simulator konsensus Raft',
+  title: 'Raft Simulator',
   description:
     'A Raft consensus simulator with deterministic simulation, continuous safety-invariant checking, and an ablation mode that turns individual Raft rules off so the guarantee they protect visibly fails.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id" className={`${mono.variable} ${serif.variable} ${sans.variable}`}>
+    <html lang="en" className={`${mono.variable} ${serif.variable} ${sans.variable}`}>
       <body className="bg-stock text-ink font-sans antialiased">
         {children}
         <ServiceWorker />

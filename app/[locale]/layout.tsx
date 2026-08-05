@@ -36,7 +36,7 @@ export default function LocaleLayout({
       <header className="sticky top-0 z-30 border-b-2 border-ink bg-stock/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 sm:px-6">
           <Link href={`/${locale}`} className="flex items-baseline gap-2.5">
-            <span className="font-serif text-xl leading-none">Mufakat</span>
+            <span className="font-serif text-xl leading-none">Raft Simulator</span>
             <span className="hidden font-sans text-micro text-ink-faint sm:inline">
               {dict.nav.tagline}
             </span>

@@ -204,13 +204,6 @@ export default function Home({ params }: { params: { locale: string } }) {
         </div>
       </section>
 
-      <section className="max-w-3xl">
-        <p className="font-sans text-micro italic leading-relaxed text-ink-faint">
-          {id
-            ? 'mufakat — kesepakatan yang dicapai lewat musyawarah, dari musyawarah mufakat pada sila keempat Pancasila. Nama yang kebetulan tepat: yang disimulasikan memang sebuah algoritma konsensus.'
-            : 'mufakat — Indonesian for consensus reached through deliberation, from musyawarah mufakat in the fourth sila of Pancasila. An unusually exact name: the thing being simulated is a consensus algorithm.'}
-        </p>
-      </section>
     </div>
   )
 }
