@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { DocumentLanguage } from '@/components/DocumentLanguage'
+import { SiteNav } from '@/components/SiteNav'
 import { LOCALES, dictionary, isLocale, type Locale } from '@/lib/i18n'
 
 export function generateStaticParams(): { locale: Locale }[] {
@@ -30,45 +31,40 @@ export default function LocaleLayout({
       <a href="#main" className="skip-link font-sans text-sm">
         {locale === 'id' ? 'Lompat ke konten utama' : 'Skip to main content'}
       </a>
-      <header className="border-b-2 border-ink">
-        <div className="mx-auto flex max-w-[1400px] flex-wrap items-baseline gap-x-6 gap-y-2 px-4 py-3">
-          <Link href={`/${locale}`} className="font-serif text-xl leading-none">
-            Mufakat
-          </Link>
-          <span className="font-sans text-xs text-ink-faint">{dict.nav.tagline}</span>
-          <nav className="ml-auto flex gap-4 font-sans text-sm">
-            {links.map((link) => (
-              <Link key={link.href} href={link.href} className="hover:underline underline-offset-4">
-                {link.label}
-              </Link>
-            ))}
-            <span className="flex gap-1 text-ink-faint">
-              {LOCALES.map((option) => (
-                <Link
-                  key={option}
-                  href={`/${option}`}
-                  className={option === locale ? 'text-ink font-semibold' : 'hover:text-ink'}
-                >
-                  {option}
-                </Link>
-              ))}
+      {/* Sticky, because the simulator is a long page and losing the way back to the
+          scenario library halfway down it is a small, avoidable annoyance. */}
+      <header className="sticky top-0 z-30 border-b-2 border-ink bg-stock/95 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 sm:px-6">
+          <Link href={`/${locale}`} className="flex items-baseline gap-2.5">
+            <span className="font-serif text-xl leading-none">Mufakat</span>
+            <span className="hidden font-sans text-micro text-ink-faint sm:inline">
+              {dict.nav.tagline}
             </span>
-          </nav>
+          </Link>
+          <SiteNav locale={locale} links={links} />
         </div>
       </header>
-      <main id="main" className="mx-auto max-w-[1400px] px-4 py-6">{children}</main>
-      <footer className="mt-12 border-t border-ink-rule">
-        <div className="mx-auto max-w-[1400px] px-4 py-6 font-sans text-xs text-ink-faint">
-          <p>
-            Sumber normatif:{' '}
-            <a href="https://raft.github.io/raft.pdf" className="underline underline-offset-2">
+      <main id="main" className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6">
+        {children}
+      </main>
+      <footer className="mt-16 border-t border-ink-rule">
+        <div className="mx-auto flex max-w-[1400px] flex-col gap-2 px-4 py-8 font-sans text-micro leading-relaxed text-ink-faint sm:px-6">
+          <p className="max-w-3xl">
+            {locale === 'id' ? 'Sumber normatif' : 'Normative source'}:{' '}
+            <a
+              href="https://raft.github.io/raft.pdf"
+              className="text-ink-soft underline underline-offset-2 hover:text-ink"
+            >
               Ongaro &amp; Ousterhout, In Search of an Understandable Consensus Algorithm
             </a>
-            . Visualiser kanonis:{' '}
-            <a href="https://raft.github.io/" className="underline underline-offset-2">
+            . {locale === 'id' ? 'Visualiser kanonis' : 'The canonical visualiser'}:{' '}
+            <a
+              href="https://raft.github.io/"
+              className="text-ink-soft underline underline-offset-2 hover:text-ink"
+            >
               RaftScope
             </a>
-            , oleh penulis makalahnya.
+            {locale === 'id' ? ', oleh penulis makalahnya.' : ', by the paper’s own author.'}
           </p>
         </div>
       </footer>
