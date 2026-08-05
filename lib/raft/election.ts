@@ -4,15 +4,15 @@
 
 import { enforceElectionRestriction, incrementTermOnCandidacy } from './rules'
 import { resetElectionTimer } from './timers'
-import { becomeLeader, peersOf, type Transition } from './replication'
-import { isAtLeastAsUpToDate, lastLogIndex, lastLogTerm } from './log'
-import {
-  majority,
-  type Message,
-  type NodeState,
-  type RaftConfig,
-  type RequestVoteRequest,
-  type RequestVoteResponse,
+import { becomeLeader, type Transition } from './replication'
+import { configurationOf, isAtLeastAsUpToDate, lastLogIndex, lastLogTerm } from './log'
+import { hasQuorum, isMember, replicationTargets } from './configuration'
+import type {
+  Message,
+  NodeState,
+  RaftConfig,
+  RequestVoteRequest,
+  RequestVoteResponse,
 } from './types'
 
 /**
@@ -45,13 +45,15 @@ export function startElection(state: NodeState, config: RaftConfig): Transition 
 
   const timerReset = resetElectionTimer(candidate, config)
 
-  // A single-node cluster elects itself on its own vote; the majority is one.
-  if (majority(config.nodeCount) <= 1) {
+  // §6 — who may vote is whatever the server's own log says the cluster is, joint
+  // configurations included. A one-server cluster elects itself on its own vote.
+  const configuration = configurationOf(state.log)
+  if (hasQuorum(configuration, (id) => votesGranted[id] === true)) {
     const won = becomeLeader(timerReset.state, config)
     return { ...won, timers: [...won.timers] }
   }
 
-  const outbox: readonly Message[] = peersOf(state.id, config.nodeCount).map((peer) => {
+  const outbox: readonly Message[] = replicationTargets(configuration, state.id).map((peer) => {
     const request: RequestVoteRequest = {
       type: 'RequestVote',
       from: state.id,
@@ -145,14 +147,53 @@ export function handleRequestVoteResponse(
   votesGranted[response.from] = true
   const candidate: NodeState = { ...state, votesGranted }
 
-  const tally = votesGranted.filter(Boolean).length
-  if (tally < majority(config.nodeCount)) {
+  // §6 — a joint configuration needs separate majorities of *both* halves, which is
+  // the one thing standing between a membership change and two leaders in one term.
+  const configuration = configurationOf(state.log)
+  if (!hasQuorum(configuration, (id) => votesGranted[id] === true)) {
     return { state: candidate, outbox: [], timers: [] }
   }
   return becomeLeader(candidate, config)
 }
 
+/**
+ * §6, third issue — "servers disregard RequestVote RPCs when they believe a current
+ * leader exists."
+ *
+ * Without this, a server removed from the cluster is a permanent denial of service:
+ * it receives no heartbeats, times out, campaigns with an ever-higher term, and every
+ * attempt forces the real leader to step down even though the campaign can never win.
+ * The cluster stays available in principle and useless in practice.
+ *
+ * A leader does not disregard anything — it has its own way of learning it has been
+ * superseded, and short-circuiting that would let two leaders coexist.
+ */
+export function shouldDisregardRequestVote(state: NodeState, config: RaftConfig): boolean {
+  void config
+  if (state.role === 'leader') return false
+  return state.heardFromLeader
+}
+
+/** The reply to a disregarded RequestVote: this server's term, and no vote. */
+export function disregardRequestVote(
+  state: NodeState,
+  request: RequestVoteRequest,
+): RequestVoteResponse {
+  return {
+    type: 'RequestVoteResponse',
+    from: state.id,
+    to: request.from,
+    term: state.currentTerm,
+    voteGranted: false,
+  }
+}
+
 /** Votes counted for this node in its current term. For the cluster view. */
 export function voteTally(state: NodeState): number {
   return state.votesGranted.filter(Boolean).length
+}
+
+/** Whether this server is currently part of its own cluster. §6. */
+export function isClusterMember(state: NodeState): boolean {
+  return isMember(configurationOf(state.log), state.id)
 }

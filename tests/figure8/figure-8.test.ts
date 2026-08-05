@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { UNMODIFIED_RAFT } from '@/lib/raft/rules'
 import type { NodeState, RaftConfig } from '@/lib/raft/types'
 import { logFrom, heldEntries } from '@/lib/raft/log'
+import { allServers } from '@/lib/raft/configuration'
 import { createNode } from '@/lib/raft/node'
 import { Director } from '../helpers/director'
 
@@ -54,7 +55,7 @@ function panelA(config: RaftConfig): NodeState[] {
     ...createNode(id, 5, 20_140_000 + id),
     currentTerm: 2,
     votedFor: S1,
-    log: logFrom([{ term: 1, command: 'a' }]),
+    log: logFrom([{ term: 1, command: 'a' }], allServers(5)),
     commitIndex: 1,
     lastApplied: 1,
     stateMachine: ['a'],
@@ -63,7 +64,7 @@ function panelA(config: RaftConfig): NodeState[] {
   const nodes = ALL.map(base)
   const withEntry = (node: NodeState): NodeState => ({
     ...node,
-    log: logFrom([...heldEntries(node.log), { term: 2, command: 'b' }]),
+    log: logFrom([...heldEntries(node.log), { term: 2, command: 'b' }], allServers(5)),
   })
 
   nodes[S1] = {
@@ -99,6 +100,8 @@ function playThroughPanelC(director: Director): void {
   // ---- (b) S1 crashes; S5 is elected, on votes from S3 and S4 ----
   director.crash(S1)
   director.clearWire()
+  // S1 is gone; every other server's election timer fires before anyone campaigns.
+  director.elapse()
 
   // S5 campaigns. S2 refuses — its log holds a term-2 entry and S5's does not, which
   // is the election restriction doing exactly what it is for. S3 and S4 grant.
@@ -116,6 +119,7 @@ function playThroughPanelC(director: Director): void {
   // ---- (c) S5 crashes; S1 restarts and is elected leader of term 4 ----
   director.crash(S5)
   director.restart(S1)
+  director.elapse()
   expect(director.nodes[S1]?.role).toBe('follower')
   expect(director.nodes[S1]?.currentTerm).toBe(2)
   expect(director.logTerms(S1)).toEqual([1, 2])
@@ -167,6 +171,7 @@ describe('Figure 8 — with the current-term commit rule (unmodified Raft)', () 
     director.clearWire()
     expect(director.logTerms(S1)).toEqual([1, 2, 4])
     director.crash(S1)
+    director.elapse()
 
     // S5 returns and wins term 5: its last term, 3, beats S2 and S3's last term, 2.
     director.restart(S5)
@@ -209,6 +214,7 @@ describe('Figure 8 — with the current-term commit rule (unmodified Raft)', () 
 
     director.crash(S1)
     director.restart(S5)
+    director.elapse()
 
     // Now S5 can never win: S2 and S3 hold a term-4 entry, and S5's last term is 3.
     for (let attempt = 0; attempt < 6; attempt += 1) {
@@ -240,6 +246,7 @@ describe('Figure 8 — with the current-term commit rule ablated', () => {
     director.clientRequest(S1, 'd')
     director.clearWire()
     director.crash(S1)
+    director.elapse()
 
     director.restart(S5)
     director.campaign(S5)

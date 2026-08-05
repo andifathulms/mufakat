@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { heldEntries, lastLogIndex } from '@/lib/raft/log'
+import { configurationOf, heldEntries, lastLogIndex } from '@/lib/raft/log'
+import { sameConfiguration } from '@/lib/raft/configuration'
 import { run } from '@/lib/sim/simulation'
 import { fuzzScenario } from '../helpers/generate'
 
@@ -88,6 +89,40 @@ describe('invariant fuzzing — unmodified Raft', () => {
     expect(installsDelivered).toBeGreaterThan(100)
     expect(retainedSuffix).toBeGreaterThan(50)
     expect(discardedLog).toBeGreaterThan(50)
+  })
+
+  it('exercises §6 rather than reporting green with the membership unchanged', () => {
+    // The same argument as for §7: a joint-consensus bug that only shows once clusters
+    // actually change membership would hide behind a suite where they never do.
+    let requested = 0
+    let joint = 0
+    let completed = 0
+
+    for (let seed = 1; seed <= 400; seed += 1) {
+      const spec = fuzzScenario(seed)
+      if (!spec.actions.some((action) => action.kind === 'change-configuration')) continue
+      requested += 1
+      const trace = run(spec)
+      // A transitional configuration was genuinely in force at some point...
+      if (
+        trace.steps.some((step) =>
+          step.nodes.some((node) => configurationOf(node.log).type === 'joint'),
+        )
+      ) {
+        joint += 1
+      }
+      // ...and on at least some runs the change ran all the way to C-new.
+      const last = trace.steps[trace.steps.length - 1]
+      if (last === undefined) continue
+      const started = configurationOf(trace.steps[0]?.nodes[0]?.log ?? last.nodes[0]!.log)
+      if (last.nodes.some((node) => !sameConfiguration(configurationOf(node.log), started))) {
+        completed += 1
+      }
+    }
+
+    expect(requested).toBeGreaterThan(50)
+    expect(joint).toBeGreaterThan(30)
+    expect(completed).toBeGreaterThan(30)
   })
 })
 

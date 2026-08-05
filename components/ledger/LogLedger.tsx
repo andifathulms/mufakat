@@ -172,7 +172,16 @@ function Cell({
         >
           {entry.term}
         </span>
-        <span className={committed ? 'text-ink' : 'text-ink-soft italic'}>{entry.command}</span>
+        {/* §6 — a configuration change is a log entry like any other, and looks like
+            one, but it is worth being able to pick out of a column at a glance. */}
+        <span
+          className={[
+            committed ? 'text-ink' : 'text-ink-soft italic',
+            entry.configuration !== undefined ? 'font-bold' : '',
+          ].join(' ')}
+        >
+          {entry.command}
+        </span>
         {applied && (
           <span className="text-committed text-[10px]" title={dict.ledger.applied} aria-hidden>
             ✓

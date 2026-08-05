@@ -9,17 +9,26 @@
  */
 
 import { prngFromSeed } from '@/lib/sim/prng'
-import { EMPTY_LOG, lastLogIndex } from './log'
+import { initialLog, lastLogIndex } from './log'
 import { persistVotedForAcrossRestart, stepDownOnHigherTerm } from './rules'
-import { handleRequestVote, handleRequestVoteResponse, startElection } from './election'
+import {
+  disregardRequestVote,
+  handleRequestVote,
+  handleRequestVoteResponse,
+  shouldDisregardRequestVote,
+  startElection,
+} from './election'
 import {
   appendClientEntry,
   broadcastAppendEntries,
   handleAppendEntries,
   handleAppendEntriesResponse,
+  advanceConfigurationChange,
+  beginConfigurationChange,
   handleInstallSnapshot,
   handleInstallSnapshotResponse,
   maybeSnapshot,
+  stepDownIfRemoved,
   type Transition,
 } from './replication'
 import { applyCommitted } from './commit'
@@ -42,7 +51,7 @@ export function createNode(id: NodeId, nodeCount: number, seed: number): NodeSta
     role: 'follower',
     currentTerm: 0,
     votedFor: null,
-    log: EMPTY_LOG,
+    log: initialLog(nodeCount),
     commitIndex: 0,
     lastApplied: 0,
     nextIndex: new Array<number>(nodeCount).fill(1),
@@ -54,6 +63,7 @@ export function createNode(id: NodeId, nodeCount: number, seed: number): NodeSta
     prng: prngFromSeed(seed, id + 1),
     electionTimerId: 0,
     heartbeatTimerId: 0,
+    heardFromLeader: false,
     stateMachine: [],
   }
 }
@@ -137,6 +147,7 @@ function restart(state: NodeState, config: RaftConfig): Transition {
     matchIndex: new Array<number>(config.nodeCount).fill(0),
     votesGranted: new Array<boolean>(config.nodeCount).fill(false),
     leaderId: null,
+    heardFromLeader: false,
     heartbeatTimerId: state.heartbeatTimerId + 1,
   }
   const timerReset = resetElectionTimer(rebooted, config)
@@ -174,6 +185,15 @@ export function step(state: NodeState, input: Input, config: RaftConfig): StepRe
 
   switch (input.type) {
     case 'message': {
+      // §6, third issue — "servers disregard RequestVote RPCs when they believe a
+      // current leader exists". Checked *before* All Servers rule 2, and that ordering
+      // is the whole point: disregarding means not adopting the term either. A removed
+      // server campaigning with an ever-higher term would otherwise depose a perfectly
+      // healthy leader on every attempt, forever.
+      if (input.message.type === 'RequestVote' && shouldDisregardRequestVote(node, config)) {
+        outbox = [disregardRequestVote(node, input.message)]
+        break
+      }
       // Figure 2, All Servers rule 2, applied to every RPC request and response
       // before the receiver rules see it.
       const observed = observeTerm(node, input.message.term, config)
@@ -192,6 +212,9 @@ export function step(state: NodeState, input: Input, config: RaftConfig): StepRe
       // Figure 2, Followers rule 2 and Candidates rule 4. A leader has no election
       // timeout; if one is somehow outstanding it is stale by definition.
       if (node.role === 'leader') break
+      // The timer firing is exactly what ends the window in which this server
+      // believes a leader exists. See `heardFromLeader`.
+      node = { ...node, heardFromLeader: false }
       const transition = startElection(node, config)
       node = transition.state
       outbox = transition.outbox
@@ -223,6 +246,18 @@ export function step(state: NodeState, input: Input, config: RaftConfig): StepRe
       break
     }
 
+    case 'change-configuration': {
+      // §6. Like a client request, this is a log entry — the difference is that it
+      // takes effect on append rather than on commit, and that the algorithm follows
+      // it up with a second entry of its own accord.
+      if (node.role !== 'leader') break
+      const transition = beginConfigurationChange(node, input.servers, config)
+      node = transition.state
+      outbox = transition.outbox
+      timers = transition.timers
+      break
+    }
+
     case 'restart': {
       const transition = restart(node, config)
       node = transition.state
@@ -241,8 +276,23 @@ export function step(state: NodeState, input: Input, config: RaftConfig): StepRe
   // input, because commitIndex can advance on any of them.
   const settled = applyCommitted(node)
   const applied: readonly AppliedEntry[] = settled.applied
+  node = settled.state
+
+  // §6 — once C-old,new commits the leader must append C-new, and once C-new commits a
+  // leader that is no longer a member must step down. Both hang off a commit-index
+  // advance, which any input can cause, so both are checked here rather than at the
+  // one call site that happens to be commonest.
+  const advanced = advanceConfigurationChange(node, config)
+  node = stepDownIfRemoved(advanced.state)
+  const configurationOutbox = advanced.outbox
+
   // §7 — and only then may the server discard what it has applied. Snapshotting
   // *after* applying is not an ordering preference: the other way round would let a
   // server discard an entry it had not yet put into its state machine.
-  return { state: maybeSnapshot(settled.state, config), outbox, timers, applied }
+  return {
+    state: maybeSnapshot(node, config),
+    outbox: configurationOutbox.length === 0 ? outbox : [...outbox, ...configurationOutbox],
+    timers,
+    applied,
+  }
 }

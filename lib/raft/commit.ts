@@ -3,8 +3,9 @@
  */
 
 import { enforceCurrentTermCommitRule } from './rules'
-import { entryAt, lastLogIndex, termAt } from './log'
-import { majority, type AppliedEntry, type NodeState, type RaftConfig } from './types'
+import { configurationAt, entryAt, lastLogIndex, termAt } from './log'
+import { hasQuorum } from './configuration'
+import type { AppliedEntry, NodeState, RaftConfig } from './types'
 
 /**
  * Figure 2, Rules for Servers, Leaders, final rule:
@@ -24,16 +25,16 @@ import { majority, type AppliedEntry, type NodeState, type RaftConfig } from './
 export function advanceCommitIndex(state: NodeState, config: RaftConfig): NodeState {
   if (state.role !== 'leader') return state
 
-  const needed = majority(config.nodeCount)
   for (let n = lastLogIndex(state.log); n > state.commitIndex; n -= 1) {
     if (enforceCurrentTermCommitRule(config.flags) && termAt(state.log, n) !== state.currentTerm) {
       continue
     }
-    let replicas = 0
-    for (let id = 0; id < config.nodeCount; id += 1) {
-      if ((state.matchIndex[id] ?? 0) >= n) replicas += 1
-    }
-    if (replicas >= needed) {
+    // §6 — the configuration that decides whether index N is committed is the one in
+    // force *at N*, not the leader's latest. An entry must be agreed by the cluster
+    // that existed when it was proposed; judging an old entry by a newer membership
+    // would let servers that were not yet members vote on it retrospectively.
+    const configuration = configurationAt(state.log, n)
+    if (hasQuorum(configuration, (id) => (state.matchIndex[id] ?? 0) >= n)) {
       return { ...state, commitIndex: n }
     }
   }

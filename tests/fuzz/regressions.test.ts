@@ -50,9 +50,19 @@ const ABLATION_WITNESSES: readonly {
 }[] = [
   { seed: 9, flag: 'electionRestriction', property: 'leader-completeness' },
   { seed: 22, flag: 'appendEntriesConsistencyCheck', property: 'log-matching' },
-  { seed: 795, flag: 'termIncrementOnCandidacy', property: 'election-safety' },
   { seed: 2, flag: 'stepDownOnHigherTerm', property: 'election-safety' },
   { seed: 6026, flag: 'currentTermCommitRule', property: 'state-machine-safety' },
+  // `termIncrementOnCandidacy` had a witness here — seed 795 — and lost it when §6's
+  // anti-disruption rule landed. That rule makes a server that believes a leader
+  // exists disregard RequestVote outright, which is precisely the opening the old
+  // witness relied on, so it is now rare enough not to appear in the first few
+  // thousand seeds. The rule is still proven by the hand-built `double-candidacy`
+  // scenario, which is the authoritative test; this list is a secondary guard on the
+  // generator, and an honest gap in it beats a seed that no longer means anything.
+  //
+  // `jointConsensus` and `persistVotedFor` have never had witnesses here: both need a
+  // sequence the fuzzer does not stumble into, and both are covered by hand-built
+  // scenarios instead.
 ]
 
 /**

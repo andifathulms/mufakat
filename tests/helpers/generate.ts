@@ -107,6 +107,40 @@ export function fuzzScenario(seed: number, options: FuzzOptions = {}): Scenario 
     }
   }
 
+  // §6 — one membership change per run, on roughly a third of them, and never on a
+  // liveness run: a cluster mid-change that is also being partitioned and crashed
+  // cannot be expected to make progress, and asserting that it does would be
+  // asserting something Raft never promised. Safety, on the other hand, must hold
+  // throughout, which is exactly what these runs are for.
+  //
+  // The target keeps at least three members. Smaller clusters are legal Raft and make
+  // every quorum question degenerate, which buys no coverage.
+  if (quietAfter >= maxTime && nodeCount >= 3) {
+    const drawChange = nextInt(prng, 0, 2)
+    prng = drawChange.prng
+    if (drawChange.value === 0) {
+      const target: number[] = []
+      for (let id = 0; id < nodeCount; id += 1) {
+        const keep = nextInt(prng, 0, 1)
+        prng = keep.prng
+        if (keep.value === 1) target.push(id)
+      }
+      while (target.length < 3) {
+        const add = nextInt(prng, 0, nodeCount - 1)
+        prng = add.prng
+        if (!target.includes(add.value)) target.push(add.value)
+      }
+      const drawAt = nextInt(prng, 1500, Math.max(2500, Math.floor(maxTime / 2)))
+      prng = drawAt.prng
+      actions.push({
+        at: drawAt.value,
+        kind: 'change-configuration',
+        node: 0,
+        servers: target.sort((a, b) => a - b),
+      })
+    }
+  }
+
   // Restore the cluster before the quiet period, so liveness has a chance.
   if (quietAfter < maxTime) {
     actions.push({ at: quietAfter, kind: 'heal' })

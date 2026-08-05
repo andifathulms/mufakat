@@ -14,6 +14,7 @@
  */
 
 import { logFrom } from '@/lib/raft/log'
+import { allServers } from '@/lib/raft/configuration'
 import { createNode } from '@/lib/raft/node'
 import type { AblationFlagName } from '@/lib/raft/rules'
 import { UNMODIFIED_RAFT } from '@/lib/raft/rules'
@@ -72,17 +73,20 @@ export function figure8PanelA(seed: number): readonly NodeState[] {
     ...createNode(id, 5, seed),
     currentTerm: 2,
     votedFor: 0,
-    log: logFrom([{ term: 1, command: 'a' }]),
+    log: logFrom([{ term: 1, command: 'a' }], allServers(5)),
     commitIndex: 1,
     lastApplied: 1,
     stateMachine: ['a'],
   })
   const withIndexTwo = (id: number): NodeState => ({
     ...base(id),
-    log: logFrom([
-      { term: 1, command: 'a' },
-      { term: 2, command: 'b' },
-    ]),
+    log: logFrom(
+      [
+        { term: 1, command: 'a' },
+        { term: 2, command: 'b' },
+      ],
+      allServers(5),
+    ),
   })
   return [
     {
@@ -131,7 +135,7 @@ export function logMatchingStart(seed: number): readonly NodeState[] {
     ...createNode(id, 5, seed),
     currentTerm: 4,
     votedFor: 0,
-    log: logFrom(log),
+    log: logFrom(log, allServers(5)),
     commitIndex: 2,
     lastApplied: 2,
     stateMachine: ['a', 'b'],
@@ -170,7 +174,7 @@ export function doubleCandidacyStart(seed: number): readonly NodeState[] {
     ...createNode(id, 3, seed),
     currentTerm: 1,
     votedFor,
-    log: logFrom([{ term: 1, command: 'a' }]),
+    log: logFrom([{ term: 1, command: 'a' }], allServers(3)),
     commitIndex: 1,
     lastApplied: 1,
     stateMachine: ['a'],
@@ -195,7 +199,7 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
       en: 'A leader is elected from a standing start and client entries commit, under a network that loses messages — the ordinary case, which is worth seeing before anything breaks.',
     },
     spec: scenario({
-      seed: 5,
+      seed: 4,
       nodeCount: 5,
       network: LOSSY_NETWORK,
       actions: [
@@ -426,6 +430,38 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
   },
 
   {
+    id: 'membership-change',
+    title: 'Mengganti anggota cluster',
+    summary:
+      'Cluster {0,1,2} berubah menjadi {2,3,4}. Perubahan lewat konfigurasi gabungan C-old,new; tanpa itu kedua sisi bisa memilih leader sendiri-sendiri di term yang sama.',
+    phenomenon: {
+      id:
+        'Cluster tidak bisa berpindah langsung dari C-old ke C-new, karena tidak ada satu saat pun di mana semua server berpindah bersamaan — untuk sesaat sebagian percaya C-old dan sebagian C-new. Di sini {0,1} adalah mayoritas dari {0,1,2} dan {3,4} adalah mayoritas dari {2,3,4}, dan keduanya tidak beririsan: itulah Figure 10. Dengan joint consensus, konfigurasi peralihan C-old,new menuntut mayoritas dari *kedua* himpunan sekaligus, jadi ketika partisi memotong cluster tidak ada sisi yang bisa menang — cluster berhenti, dan itu benar. Matikan aturannya dan kedua sisi memilih leader di term yang sama.',
+      en: "A cluster cannot switch directly from C-old to C-new, because there is no instant at which every server switches together — for a while some believe C-old and others C-new. Here {0,1} is a majority of {0,1,2} and {3,4} is a majority of {2,3,4}, and the two are disjoint: that is Figure 10. With joint consensus the transitional C-old,new demands majorities of *both* sets at once, so when the partition cuts the cluster neither side can win — it stalls, which is correct. Turn the rule off and both sides elect a leader in the same term.",
+    },
+    spec: scenario({
+      seed: 15,
+      nodeCount: 5,
+      network: SCRIPTED_NETWORK,
+      // Three members of five slots. Nodes 3 and 4 exist but belong to no cluster yet,
+      // which is exactly what a machine waiting to be added is.
+      initialServers: [0, 1, 2],
+      actions: [
+        { at: 900, kind: 'client-request', node: 0, command: 'set a=1' },
+        { at: 1600, kind: 'change-configuration', node: 0, servers: [2, 3, 4] },
+        // Cut {0,1} from {2,3,4} while the change is in flight — the disjoint
+        // majorities of Figure 10 are now on opposite sides of a partition.
+        { at: 1640, kind: 'partition', partitionOf: [0, 0, 1, 1, 1] },
+        { at: 3000, kind: 'heal' },
+        { at: 4200, kind: 'client-request', node: 2, command: 'set b=2' },
+      ],
+      maxTime: 6500,
+      maxSteps: 8000,
+    }),
+    ablation: { flag: 'jointConsensus', breaks: 'election-safety' },
+  },
+
+  {
     id: 'log-compaction',
     title: 'Snapshot untuk follower yang tertinggal',
     summary:
@@ -495,12 +531,16 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
       en: 'Incrementing the term on candidacy is what makes a campaign a new ballot. Node 0 leads term 1 on its own vote and node 1\'s; node 2 never received its RequestVote, so node 2\'s votedFor is still empty. Once node 0 is cut off, node 1 campaigns. With the rule on it moves to term 2, and the two leaders sit in different terms — not a violation. Without it, node 1 campaigns inside term 1, overwrites its own vote for node 0, and node 2 — which has not voted — hands it a second majority in the very same term.',
     },
     spec: scenario({
-      seed: 6,
+      seed: 1,
       nodeCount: 3,
       network: SCRIPTED_NETWORK,
-      initialNodes: doubleCandidacyStart(6),
+      initialNodes: doubleCandidacyStart(1),
       actions: [
-        { at: 300, kind: 'partition', partitionOf: [1, 0, 0] },
+        // Cut node 0 off before its first heartbeat lands. §6's anti-disruption rule
+        // means a server that has heard from a leader disregards RequestVote outright,
+        // so node 2 has to have heard from nobody for its free vote to be reachable —
+        // which is also the only state in which that vote is genuinely free.
+        { at: 1, kind: 'partition', partitionOf: [1, 0, 0] },
         { at: 4000, kind: 'heal' },
       ],
       maxTime: 7000,

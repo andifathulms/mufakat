@@ -10,6 +10,7 @@ import {
   logFrom,
   termAt,
 } from '@/lib/raft/log'
+import { allServers } from '@/lib/raft/configuration'
 import { step } from '@/lib/raft/node'
 import { buildReplication, needsSnapshot } from '@/lib/raft/replication'
 import type { InstallSnapshotRequest, InstallSnapshotResponse } from '@/lib/raft/types'
@@ -37,6 +38,7 @@ function installSnapshotRequest(
     leaderId: 1,
     lastIncludedIndex: 3,
     lastIncludedTerm: 2,
+    lastIncludedConfiguration: allServers(5),
     data: ['c1', 'c2', 'c3'],
     ...overrides,
   }
@@ -378,7 +380,7 @@ describe('§7 — when a server compacts', () => {
 describe('log helpers under compaction', () => {
   it('installSnapshot is a no-op for a stale snapshot', () => {
     const log = compact(logOf(1, 1, 2, 2), 3)
-    expect(installSnapshot(log, 2, 1)).toBe(log)
+    expect(installSnapshot(log, 2, 1, allServers(5))).toBe(log)
   })
 
   it('an empty log reports index 0 and term 0', () => {

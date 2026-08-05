@@ -56,6 +56,22 @@ export class Director {
     this.observe()
   }
 
+  /**
+   * Enough virtual time passes that every live server's election timer fires at least
+   * once, so none of them still believes it has recently heard from a leader.
+   *
+   * The full simulator gets this for free from the clock. Here time only advances
+   * because the test says so, and §6's anti-disruption rule is stated in terms of time
+   * since a leader was last heard — so a script that crashes a leader and then holds
+   * an election has to say that time passed, or it is asserting against a cluster
+   * frozen at the instant the leader died.
+   */
+  elapse(): void {
+    this.nodes = this.nodes.map((node, id) =>
+      this.crashed[id] === true ? node : { ...node, heardFromLeader: false },
+    )
+  }
+
   /** Force `id` to time out and start an election. */
   campaign(id: NodeId): void {
     this.input(id, { type: 'election-timeout', timerId: this.node(id).electionTimerId })

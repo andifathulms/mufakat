@@ -9,6 +9,7 @@
 import type { Prng } from '@/lib/sim/prng'
 import type { AblationFlags } from './rules'
 import type { Log } from './log'
+import type { Configuration } from './configuration'
 
 export type NodeId = number
 
@@ -16,6 +17,15 @@ export type NodeId = number
 export interface LogEntry {
   readonly term: number
   readonly command: string
+  /**
+   * §6 — present when this entry *is* a configuration change.
+   *
+   * Configurations live in the log rather than beside it, which is what makes them
+   * replicate, order themselves against ordinary entries, and survive a restart with
+   * no extra machinery. It is also why a server can adopt a configuration it has not
+   * yet committed: see `configurationOf` in `log.ts`.
+   */
+  readonly configuration?: Configuration
 }
 
 export type Role = 'follower' | 'candidate' | 'leader'
@@ -96,6 +106,8 @@ export interface InstallSnapshotRequest {
   readonly leaderId: NodeId
   readonly lastIncludedIndex: number
   readonly lastIncludedTerm: number
+  /** Figure 13, receiver rule 8 — "load snapshot's cluster configuration". §6. */
+  readonly lastIncludedConfiguration: Configuration
   /** The state machine's contents through `lastIncludedIndex`, by 1-based index. */
   readonly data: readonly (string | undefined)[]
 }
@@ -154,6 +166,19 @@ export interface NodeState {
   readonly votesGranted: readonly boolean[]
   /** Who this node currently believes is leader; drives the cluster view only. */
   readonly leaderId: NodeId | null
+  /**
+   * §6, third issue — has this server heard from a leader since its election timer
+   * last fired?
+   *
+   * The paper phrases the rule in wall-clock terms: disregard RequestVote received
+   * "within the minimum election timeout of hearing from a current leader". There is
+   * no clock in here, and inventing one would break the purity the whole simulator
+   * rests on. This flag is the same statement in the terms the state machine has:
+   * a server's election timer *is* its measure of how long since it heard from a
+   * leader, so "set when a leader is heard, cleared when the timer fires" bounds the
+   * window exactly as the paper intends.
+   */
+  readonly heardFromLeader: boolean
   /** This node's private PRNG stream, for election timeout jitter. */
   readonly prng: Prng
   /** Generation counters. A fired timer whose id is stale is ignored — this is how
@@ -178,6 +203,8 @@ export type Input =
   | { readonly type: 'election-timeout'; readonly timerId: number }
   | { readonly type: 'heartbeat-timeout'; readonly timerId: number }
   | { readonly type: 'client-request'; readonly command: string }
+  /** §6 — ask the leader to change the cluster to exactly these servers. */
+  | { readonly type: 'change-configuration'; readonly servers: readonly NodeId[] }
   /** Node restarts: persistent state survives, volatile state is reinitialised. */
   | { readonly type: 'restart' }
 
@@ -221,7 +248,14 @@ export interface RaftConfig {
   readonly snapshotThreshold: number
 }
 
-/** A majority of the cluster. Integer arithmetic: 3 -> 2, 4 -> 3, 5 -> 3. */
+/**
+ * A majority of a fixed-size cluster.
+ *
+ * Retained only for the simulator's own bookkeeping and for fixtures. The algorithm
+ * must not use it: with §6 the cluster is a variable and agreement can require two
+ * majorities at once, so `hasQuorum` in `configuration.ts` is the only definition of
+ * agreement the algorithm is allowed to consult.
+ */
 export function majority(nodeCount: number): number {
   return Math.floor(nodeCount / 2) + 1
 }

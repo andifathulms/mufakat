@@ -33,6 +33,7 @@ pnpm test:fuzz              # randomized scenarios vs the five safety properties
 pnpm test:ablation          # each toggle must break its named property
 pnpm test:figure8           # exact reproduction of the paper's Figure 8
 pnpm test:figure13          # InstallSnapshot and log compaction, §7
+pnpm test:section6          # joint consensus and membership changes, §6
 pnpm test:determinism       # byte-identical trace replay
 pnpm typecheck
 pnpm lint
@@ -75,6 +76,7 @@ workers/
 tests/
   figure2/                  # per-rule conformance fixtures
   figure13/                 # InstallSnapshot and compaction, §7
+  section6/                 # joint consensus, membership changes
   figure8/
   fuzz/
   ablation/
@@ -120,7 +122,7 @@ tests/
 - **Invariant checker before ablation.** You cannot demonstrate a violation until you can detect one.
 - **When a fuzz run fails, the algorithm is wrong.** Not the checker, not the fuzzer, not the seed. Investigate in that order and only in that order.
 - **Never relax an invariant to make a fuzz run pass.** The five properties are the definition of Raft being correct. If one fails under unmodified Raft, something real is broken.
-- **Ask before adding to the algorithm surface.** Membership changes and log compaction touch the state machine, the checker, the ledger view, the scenario schema, and every fixture at once.
+- **Ask before adding to the algorithm surface.** Membership changes and log compaction touched the state machine, the checker, the ledger view, the scenario schema, and every fixture at once — both are now in, and anything of comparable reach deserves the same question first.
 - **Don't touch `next.config.js`, the Actions workflow, or the fuzz configuration without saying so explicitly.**
 - **Don't add dependencies** for simulation, scheduling, randomness, or graph layout.
 
@@ -167,14 +169,13 @@ RaftScope and the Raft paper are linked prominently and warmly — RaftScope was
 
 ## Current state
 
-M0–M6 built, plus the log-compaction half of M7. `pnpm test:run` is green: 161 tests,
-including 49 Figure 2 conformance fixtures, 23 Figure 13 fixtures, the panel-by-panel
-Figure 8 reproduction in both directions, both directions of all six ablation toggles,
-and the fuzz suite.
+M0–M7 built. `pnpm test:run` is green: 179 tests — 49 Figure 2 conformance fixtures,
+23 Figure 13 fixtures, 16 §6 fixtures, the panel-by-panel Figure 8 reproduction in both
+directions, both directions of all seven ablation toggles, and the fuzz suite.
 
 All five safety properties hold across **10,000 randomized runs** under unmodified
-Raft, with compaction enabled on most of them. The static export builds and has been
-verified under the production `basePath`.
+Raft, with log compaction and membership changes both active. Live and verified under
+the production `basePath`.
 
 Every scenario is now hand-built. `initialNodes` is what made the last two possible:
 `log-matching-break` and `double-candidacy` both hinge on a starting position that is
@@ -222,11 +223,26 @@ visited before going offline. Verified against the deployed site, not only local
 | Fully offline after first load | 72 cached entries, verified offline |
 | JS ≤ 250 KB gzipped | **149 KB** first load |
 
+**Membership changes (§6) are in.** Cluster size is now a variable, so `majority(n)` is
+gone from the algorithm: `hasQuorum(configuration, predicate)` is the only definition of
+agreement, and a joint configuration requires majorities of *both* halves. That
+conjunction is the whole of joint consensus.
+
+Configurations live in the log and take effect **on append, not on commit** — which
+looks reckless and is load-bearing, because waiting for commitment would be circular.
+All three of §6's loose ends are implemented: a leader that removes itself keeps
+managing the cluster until C-new commits then steps down; new servers need no special
+catch-up path because the usual `nextIndex` backtracking or a snapshot handles them; and
+removed servers cannot disrupt the cluster, because a server that has heard from a
+leader disregards RequestVote outright — term adoption included.
+
+That last rule is stated in the paper in wall-clock terms. There is no clock in
+`lib/raft`, so it is expressed as `heardFromLeader`: set when a leader is heard, cleared
+when the election timer fires. A server's election timer *is* its measure of how long
+since it heard from a leader, so the window is bounded exactly as intended.
+
 Not done, and deliberately so:
 
-- **Membership changes are untouched.** The other half of M7. Joint consensus makes
-  cluster size dynamic, so majority arithmetic, the checker's notion of a quorum, the
-  scenario schema and every fixture change together.
 - **Snapshotting has no ablation toggle**, and should not get one by default. Figure
   13's rule 6 versus rule 7 is a liveness and efficiency distinction, not a safety one:
   discarding a suffix you could have kept costs a round trip, not a guarantee. A toggle

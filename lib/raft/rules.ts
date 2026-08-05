@@ -41,6 +41,12 @@ export interface AblationFlags {
   readonly stepDownOnHigherTerm: boolean
   /** §5.2 — `votedFor` is persistent state and survives a restart. */
   readonly persistVotedFor: boolean
+  /**
+   * §6 — a membership change passes through a joint configuration C-old,new in which
+   * agreement requires separate majorities of both the old and the new server sets.
+   * Defends Election Safety; removing it is Figure 10.
+   */
+  readonly jointConsensus: boolean
 }
 
 /** Unmodified Raft: every rule enforced. The only configuration that is Raft. */
@@ -51,6 +57,7 @@ export const UNMODIFIED_RAFT: AblationFlags = {
   termIncrementOnCandidacy: true,
   stepDownOnHigherTerm: true,
   persistVotedFor: true,
+  jointConsensus: true,
 }
 
 export type AblationFlagName = keyof AblationFlags
@@ -62,6 +69,7 @@ export const ABLATION_FLAG_NAMES: readonly AblationFlagName[] = [
   'termIncrementOnCandidacy',
   'stepDownOnHigherTerm',
   'persistVotedFor',
+  'jointConsensus',
 ]
 
 export interface RuleDescriptor {
@@ -126,6 +134,14 @@ export const RULE_DESCRIPTORS: readonly RuleDescriptor[] = [
     figure2: 'State, Persistent state on all servers',
     callSite: 'lib/raft/node.ts — restart',
     scenarioId: 'double-vote-restart',
+  },
+  {
+    flag: 'jointConsensus',
+    protects: 'election-safety',
+    paperSection: '§6',
+    figure2: 'Not in Figure 2 — Figure 10, and §6',
+    callSite: 'lib/raft/replication.ts — beginConfigurationChange',
+    scenarioId: 'membership-change',
   },
 ]
 
@@ -202,6 +218,18 @@ export function persistVotedForAcrossRestart(flags: AblationFlags): boolean {
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Consulted in `lib/raft/replication.ts — beginConfigurationChange`.
+ * Off: the leader switches straight from C-old to C-new with no transitional
+ * configuration, so for a while some servers believe C-old and others C-new. Those two
+ * sets can contain *disjoint* majorities — and two disjoint majorities elect two
+ * leaders in the same term. This is Figure 10, and it is the reason joint consensus
+ * exists rather than the obvious one-step switch.
+ */
+export function enforceJointConsensus(flags: AblationFlags): boolean {
+  return flags.jointConsensus
+}
 
 /** True if any rule is off. Such a run is labelled *modified Raft* everywhere. */
 export function isModifiedRaft(flags: AblationFlags): boolean {

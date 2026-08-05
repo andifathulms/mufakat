@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { entryAt, heldEntries, lastLogIndex } from '@/lib/raft/log'
+import { configurationOf, entryAt, heldEntries, lastLogIndex } from '@/lib/raft/log'
+import { members } from '@/lib/raft/configuration'
 import { SCENARIOS, ablated, scenarioForFlag } from '@/data/scenarios'
 import {
   ABLATION_FLAG_NAMES,
@@ -50,7 +51,9 @@ describe('rule descriptors', () => {
 
   it('cites a paper section and a Figure 2 location for every rule', () => {
     for (const rule of RULE_DESCRIPTORS) {
-      expect(rule.paperSection).toMatch(/^§5\./)
+      // §6 is not in Figure 2 at all — membership changes are their own section, and
+      // the descriptor says so rather than pretending otherwise.
+      expect(rule.paperSection).toMatch(/^§[56]/)
       expect(rule.figure2.length).toBeGreaterThan(5)
       expect(rule.callSite).toMatch(/^lib\/raft\//)
     }
@@ -211,6 +214,32 @@ describe('scenario phenomena actually occur', () => {
     // And under unmodified Raft, losing it costs nothing, because it was never
     // committed. That is the entire argument of the figure.
     expect(trace.violations).toEqual([])
+  })
+
+  it('membership-change: the transition passes through a joint configuration', () => {
+    const spec = scenarioById('membership-change')
+    const trace = run(spec)
+    expect(trace.violations).toEqual([])
+
+    // C-old,new was genuinely in force, and on more than just the leader.
+    const jointStep = trace.steps.find((step) =>
+      step.nodes.filter((node) => configurationOf(node.log).type === 'joint').length >= 2,
+    )
+    expect(jointStep).toBeDefined()
+
+    // While partitioned, neither disjoint majority can elect — the cluster correctly
+    // stalls rather than splitting. That stall is the demonstration.
+    const partitioned = trace.steps.filter((step) => step.time > 1700 && step.time < 3000)
+    for (const step of partitioned) {
+      const leaders = step.nodes.filter((node) => node.role === 'leader')
+      const terms = new Set(leaders.map((node) => node.currentTerm))
+      expect(terms.size).toBe(leaders.length)
+    }
+
+    // And once healed the change completes: the cluster is {2,3,4}.
+    const last = trace.steps[trace.steps.length - 1]
+    const settled = last?.nodes[2]
+    expect(members(configurationOf(settled?.log ?? last!.nodes[0]!.log))).toEqual([2, 3, 4])
   })
 
   it('log-compaction: the lagging follower is caught up by a snapshot, not by entries', () => {

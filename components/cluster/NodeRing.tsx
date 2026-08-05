@@ -9,6 +9,8 @@
  */
 
 import type { Dictionary } from '@/lib/i18n'
+import { describeConfiguration, isMember, type Configuration } from '@/lib/raft/configuration'
+import { configurationOf } from '@/lib/raft/log'
 import type { NodeState, Role } from '@/lib/raft/types'
 import type { InFlight, TraceStep } from '@/lib/sim/trace'
 
@@ -85,6 +87,13 @@ export function NodeRing({ step, dict, onNodeAction, selected, onSelect }: Props
   const count = step.nodes.length
   const partitions = new Set(step.network.partitionOf)
   const split = partitions.size > 1
+  // §6 — a server's configuration is whatever its own log says, so the cluster shown
+  // is the one the leader believes in, falling back to node 0's view when there is no
+  // leader. Servers can genuinely disagree about membership mid-change, and the node
+  // badges show that rather than hiding it behind one authoritative answer.
+  const authority = step.nodes.find((node) => node.role === 'leader') ?? step.nodes[0]
+  const configuration: Configuration =
+    authority === undefined ? { type: 'simple', servers: [] } : configurationOf(authority.log)
 
   return (
     <div className="flex flex-col gap-3">
@@ -167,6 +176,18 @@ export function NodeRing({ step, dict, onNodeAction, selected, onSelect }: Props
               {isSelected && (
                 <circle r="30" fill="none" className="stroke-ink" strokeWidth="1" strokeDasharray="2 3" />
               )}
+              {/* §6 — a server outside the configuration is not part of the cluster.
+                  Drawn with a dashed outer ring rather than a colour, because colour
+                  is spoken for and membership is not a state of the server. */}
+              {!isMember(configurationOf(node.log), node.id) && (
+                <circle
+                  r="27"
+                  fill="none"
+                  className="stroke-ink-faint"
+                  strokeWidth="1"
+                  strokeDasharray="1 4"
+                />
+              )}
               <NodeGlyph role={node.role} crashed={crashed} />
               {/* The digit sits on the role fill, so its colour has to follow the
                   fill's lightness: pale ink on the deep blue leader, dark ink on the
@@ -216,6 +237,10 @@ export function NodeRing({ step, dict, onNodeAction, selected, onSelect }: Props
           )
         })}
       </svg>
+
+      <p className="text-center font-mono text-[11px] tabular text-ink-soft">
+        {dict.sim.configuration}: {describeConfiguration(configuration)}
+      </p>
 
       <NodeDetail
         step={step}
@@ -276,6 +301,7 @@ function NodeDetail({
         <Field label="votedFor" value={node.votedFor ?? '—'} />
         <Field label="commitIndex" value={node.commitIndex} />
         <Field label="lastApplied" value={node.lastApplied} />
+        <Field label="configuration" value={describeConfiguration(configurationOf(node.log))} />
         {node.role === 'leader' && (
           <>
             <Field label="nextIndex" value={node.nextIndex.join(' ')} />

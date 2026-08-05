@@ -65,6 +65,9 @@ interface Dictionary {
     readonly truncated: string
     readonly seed: string
     readonly rerun: string
+    readonly configuration: string
+    readonly addServer: string
+    readonly removeServer: string
   }
   readonly roles: Readonly<Record<'follower' | 'candidate' | 'leader' | 'crashed', string>>
   readonly ledger: {
@@ -161,6 +164,9 @@ const id: Dictionary = {
     truncated: 'Jejak dipotong pada batas peristiwa.',
     seed: 'Seed',
     rerun: 'Jalankan ulang',
+    configuration: 'Konfigurasi',
+    addServer: 'Tambahkan',
+    removeServer: 'Keluarkan',
   },
   roles: {
     follower: 'Follower',
@@ -232,6 +238,10 @@ const id: Dictionary = {
         title: 'votedFor persistent',
         body: 'votedFor adalah persistent state dan bertahan melewati restart. Kalau hilang, satu node bisa memilih dua kali dalam satu term dan melahirkan dua leader.',
       },
+      jointConsensus: {
+        title: 'Joint consensus',
+        body: 'Perubahan keanggotaan melewati konfigurasi peralihan C-old,new, di mana kesepakatan menuntut mayoritas dari himpunan lama *dan* himpunan baru sekaligus. Tanpa itu, cluster berpindah langsung dari C-old ke C-new — dan karena tidak ada satu saat pun semua server berpindah bersamaan, dua mayoritas yang tidak beririsan bisa memilih dua leader di term yang sama. Itulah Figure 10.',
+      },
     },
   },
   scenarios: {
@@ -297,6 +307,9 @@ const en: Dictionary = {
     truncated: 'Trace truncated at the event budget.',
     seed: 'Seed',
     rerun: 'Re-run',
+    configuration: 'Configuration',
+    addServer: 'Add',
+    removeServer: 'Remove',
   },
   roles: {
     follower: 'Follower',
@@ -360,6 +373,10 @@ const en: Dictionary = {
       persistVotedFor: {
         title: 'Persistent votedFor',
         body: 'votedFor is persistent state and survives a restart. Lose it and one server can vote twice in a term, electing two leaders in it.',
+      },
+      jointConsensus: {
+        title: 'Joint consensus',
+        body: "A membership change passes through a transitional configuration C-old,new, in which agreement requires a majority of the old set *and* of the new one. Without it the cluster switches straight from C-old to C-new — and since there is no instant at which every server switches together, two disjoint majorities can elect two leaders in the same term. That is Figure 10.",
       },
     },
   },

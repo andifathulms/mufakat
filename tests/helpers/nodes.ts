@@ -1,6 +1,7 @@
 import { createNode } from '@/lib/raft/node'
 import { UNMODIFIED_RAFT, type AblationFlags } from '@/lib/raft/rules'
 import { EMPTY_LOG, logFrom, type Log } from '@/lib/raft/log'
+import { allServers } from '@/lib/raft/configuration'
 import type { NodeState, RaftConfig } from '@/lib/raft/types'
 
 export const TEST_CONFIG: RaftConfig = {
@@ -35,7 +36,16 @@ export function nodeWith(
   config: RaftConfig = TEST_CONFIG,
   id = 0,
 ): NodeState {
-  return { ...createNode(id, config.nodeCount, 1), ...overrides }
+  const node = { ...createNode(id, config.nodeCount, 1), ...overrides }
+  // §6 — a hand-built log has no baseline configuration, and a server whose
+  // configuration is empty belongs to no cluster: it has no peers and can reach no
+  // quorum. A fixture node is a member of the whole test cluster unless it says
+  // otherwise, so fill the baseline in rather than making every fixture repeat it.
+  if (node.log.lastIncludedConfiguration.type === 'simple' &&
+      node.log.lastIncludedConfiguration.servers.length === 0) {
+    return { ...node, log: { ...node.log, lastIncludedConfiguration: allServers(config.nodeCount) } }
+  }
+  return node
 }
 
 /** A node's log, tolerating the optional lookups that `noUncheckedIndexedAccess` forces. */

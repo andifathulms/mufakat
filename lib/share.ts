@@ -23,6 +23,7 @@ const FLAG_CODES: Readonly<Record<AblationFlagName, string>> = {
   termIncrementOnCandidacy: 'ti',
   stepDownOnHigherTerm: 'sd',
   persistVotedFor: 'pv',
+  jointConsensus: 'jc',
 }
 
 function flagFor(code: string): AblationFlagName | null {
@@ -36,6 +37,7 @@ const ACTION_CODES = {
   restart: 'r',
   partition: 'p',
   heal: 'h',
+  'change-configuration': 'm',
 } as const
 
 export interface ShareState {
@@ -59,6 +61,8 @@ function encodeAction(action: Action): string {
       return `${ACTION_CODES.partition}${action.at}.${action.partitionOf.join('')}`
     case 'heal':
       return `${ACTION_CODES.heal}${action.at}`
+    case 'change-configuration':
+      return `${ACTION_CODES['change-configuration']}${action.at}.${action.node}.${action.servers.join('')}`
     default: {
       const unreachable: never = action
       throw new Error(`Unhandled action: ${JSON.stringify(unreachable)}`)
@@ -91,6 +95,12 @@ function decodeAction(token: string): Action | null {
     }
     case ACTION_CODES.heal:
       return { at, kind: 'heal' }
+    case ACTION_CODES['change-configuration']: {
+      const node = Number(rest[1])
+      const digits = rest[2] ?? ''
+      if (!Number.isInteger(node) || !/^[0-9]+$/.test(digits)) return null
+      return { at, kind: 'change-configuration', node, servers: [...digits].map(Number) }
+    }
     default:
       return null
   }

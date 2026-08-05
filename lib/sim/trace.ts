@@ -44,6 +44,13 @@ export type TraceEvent =
   | { readonly kind: 'restart'; readonly node: NodeId }
   | { readonly kind: 'partition'; readonly partitionOf: readonly number[] }
   | { readonly kind: 'heal' }
+  | {
+      readonly kind: 'change-configuration'
+      readonly node: NodeId
+      readonly servers: readonly number[]
+      readonly accepted: boolean
+      readonly redirectedTo: NodeId | null
+    }
 
 export type DropReason = 'network' | 'partition' | 'crashed-sender' | 'crashed-receiver'
 
@@ -185,6 +192,14 @@ export function describeEvent(event: TraceEvent): string {
       return `partition [${event.partitionOf.join(',')}]`
     case 'heal':
       return 'heal'
+    case 'change-configuration':
+      return `configuration n${event.node} -> {${event.servers.join(',')}}${
+        event.accepted
+          ? ''
+          : event.redirectedTo === null
+            ? ' (no leader known)'
+            : ` (redirected to n${event.redirectedTo})`
+      }`
     default: {
       const unreachable: never = event
       throw new Error(`Unhandled trace event: ${JSON.stringify(unreachable)}`)

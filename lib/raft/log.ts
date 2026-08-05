@@ -19,6 +19,7 @@
  * snapshot, in one branch, under load.
  */
 
+import { allServers, type Configuration } from './configuration'
 import type { LogEntry } from './types'
 
 /** The index before the first entry. `prevLogIndex` is 0 for an empty leader log. */
@@ -40,13 +41,78 @@ export interface Log {
   readonly lastIncludedIndex: number
   /** Figure 13, State: the term of the entry at `lastIncludedIndex`. */
   readonly lastIncludedTerm: number
+  /**
+   * Figure 13, receiver rule 8 — "load snapshot's cluster configuration".
+   *
+   * A configuration lives in the log, so compacting the log would discard it. The
+   * snapshot has to carry the configuration in force at its point, or a server that
+   * has snapshotted everything would not know who is in its own cluster.
+   */
+  readonly lastIncludedConfiguration: Configuration
 }
 
-export const EMPTY_LOG: Log = { entries: [], lastIncludedIndex: NO_INDEX, lastIncludedTerm: NO_TERM }
+/**
+ * An empty log. Its baseline configuration is deliberately the empty cluster: a server
+ * created without one is a server that knows of no cluster, and the simulation states
+ * the real membership when it builds the node. Defaulting to "everyone" here would
+ * quietly invent a configuration nobody agreed on.
+ */
+export const EMPTY_LOG: Log = {
+  entries: [],
+  lastIncludedIndex: NO_INDEX,
+  lastIncludedTerm: NO_TERM,
+  lastIncludedConfiguration: { type: 'simple', servers: [] },
+}
 
 /** A log that has never been compacted, holding `entries` from index 1. */
-export function logFrom(entries: readonly LogEntry[]): Log {
-  return { entries, lastIncludedIndex: NO_INDEX, lastIncludedTerm: NO_TERM }
+export function logFrom(entries: readonly LogEntry[], baseline?: Configuration): Log {
+  return {
+    entries,
+    lastIncludedIndex: NO_INDEX,
+    lastIncludedTerm: NO_TERM,
+    lastIncludedConfiguration: baseline ?? EMPTY_LOG.lastIncludedConfiguration,
+  }
+}
+
+/** An empty log for a cluster of `nodeCount` slots, all of them members. */
+export function initialLog(nodeCount: number): Log {
+  return { ...EMPTY_LOG, lastIncludedConfiguration: allServers(nodeCount) }
+}
+
+/**
+ * §6 — "a server always uses the latest configuration in its log, regardless of
+ * whether the entry is committed."
+ *
+ * This looks reckless and is load-bearing. Waiting for commitment would be circular:
+ * you need a configuration to work out which servers form the majority that would
+ * commit the configuration. Adopting it immediately breaks the circle, and joint
+ * consensus is what makes doing so safe — the transitional configuration overlaps both
+ * the old and the new, so no decision can be taken by a set that excludes the other.
+ */
+export function configurationOf(log: Log): Configuration {
+  for (let i = log.entries.length - 1; i >= 0; i -= 1) {
+    const entry = log.entries[i]
+    if (entry?.configuration !== undefined) return entry.configuration
+  }
+  return log.lastIncludedConfiguration
+}
+
+/** The configuration in force at `index`, as that prefix of the log describes it. */
+export function configurationAt(log: Log, index: number): Configuration {
+  const highest = Math.min(index, lastLogIndex(log))
+  for (let i = highest; i > log.lastIncludedIndex; i -= 1) {
+    const entry = entryAt(log, i)
+    if (entry?.configuration !== undefined) return entry.configuration
+  }
+  return log.lastIncludedConfiguration
+}
+
+/** Index of the newest configuration entry held, or `NO_INDEX` if none is. */
+export function configurationIndex(log: Log): number {
+  for (let i = log.entries.length - 1; i >= 0; i -= 1) {
+    if (log.entries[i]?.configuration !== undefined) return log.lastIncludedIndex + i + 1
+  }
+  return NO_INDEX
 }
 
 /** The entries still held, in index order. For rendering and for digests only. */
@@ -162,6 +228,9 @@ export function compact(log: Log, throughIndex: number): Log {
     entries: sliceFrom(log, throughIndex + 1),
     lastIncludedIndex: throughIndex,
     lastIncludedTerm: term,
+    // The configuration in force at the snapshot point, or it would be discarded with
+    // the entries that carried it.
+    lastIncludedConfiguration: configurationAt(log, throughIndex),
   }
 }
 
@@ -177,7 +246,12 @@ export function compact(log: Log, throughIndex: number): Log {
  * have to fetch them again — correct, but slower. Keeping the two apart is what makes
  * the distinction in the figure visible rather than collapsed.
  */
-export function installSnapshot(log: Log, lastIncludedIndex: number, lastIncludedTerm: number): Log {
+export function installSnapshot(
+  log: Log,
+  lastIncludedIndex: number,
+  lastIncludedTerm: number,
+  lastIncludedConfiguration: Configuration,
+): Log {
   // A stale snapshot: the server has already compacted at least this far.
   if (lastIncludedIndex <= log.lastIncludedIndex) return log
 
@@ -187,11 +261,12 @@ export function installSnapshot(log: Log, lastIncludedIndex: number, lastInclude
       entries: sliceFrom(log, lastIncludedIndex + 1),
       lastIncludedIndex,
       lastIncludedTerm,
+      lastIncludedConfiguration,
     }
   }
 
   // Rule 7.
-  return { entries: [], lastIncludedIndex, lastIncludedTerm }
+  return { entries: [], lastIncludedIndex, lastIncludedTerm, lastIncludedConfiguration }
 }
 
 /**

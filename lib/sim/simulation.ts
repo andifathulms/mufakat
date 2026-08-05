@@ -12,6 +12,7 @@
 import { check, EMPTY_CHECKER_STATE } from '@/lib/invariants/checker'
 import type { CheckerState, ClusterSnapshot, Violation } from '@/lib/invariants/types'
 import { firstLogIndex, heldEntries } from '@/lib/raft/log'
+import { allServers, simpleConfiguration } from '@/lib/raft/configuration'
 import { createNode, step as raftStep } from '@/lib/raft/node'
 import { resetElectionTimer, resetHeartbeatTimer } from '@/lib/raft/timers'
 import { UNMODIFIED_RAFT, type AblationFlags } from '@/lib/raft/rules'
@@ -37,6 +38,13 @@ export type Action =
   | { readonly at: number; readonly kind: 'restart'; readonly node: NodeId }
   | { readonly at: number; readonly kind: 'partition'; readonly partitionOf: readonly number[] }
   | { readonly at: number; readonly kind: 'heal' }
+  /** §6 — ask the cluster to become exactly `servers`. Routed to the leader. */
+  | {
+      readonly at: number
+      readonly kind: 'change-configuration'
+      readonly node: NodeId
+      readonly servers: readonly NodeId[]
+    }
 
 export interface Scenario {
   readonly nodeCount: number
@@ -48,6 +56,15 @@ export interface Scenario {
   readonly flags: AblationFlags
   /** §7 — applied entries above the snapshot point before a server compacts. 0 = off. */
   readonly snapshotThreshold: number
+  /**
+   * §6 — the cluster the run starts with. Defaults to every slot.
+   *
+   * The simulation always has `nodeCount` server *slots*; the configuration decides
+   * which of them are members. A scenario that adds servers starts with fewer members
+   * than slots, and the extra slots sit there as servers that exist but belong to no
+   * cluster — which is exactly what a machine waiting to be added is.
+   */
+  readonly initialServers?: readonly NodeId[]
   readonly actions: readonly Action[]
   /** Event budget. Bounded runs keep fuzzing and trace memory finite. */
   readonly maxSteps: number
@@ -150,9 +167,14 @@ class Simulation {
   constructor(spec: Scenario) {
     this.spec = spec
     this.raft = toRaftConfig(spec)
-    const fresh = Array.from({ length: spec.nodeCount }, (_, id) =>
-      createNode(id, spec.nodeCount, spec.seed),
-    )
+    const configuration =
+      spec.initialServers === undefined
+        ? allServers(spec.nodeCount)
+        : simpleConfiguration(spec.initialServers)
+    const fresh = Array.from({ length: spec.nodeCount }, (_, id) => {
+      const node = createNode(id, spec.nodeCount, spec.seed)
+      return { ...node, log: { ...node.log, lastIncludedConfiguration: configuration } }
+    })
     if (spec.initialNodes !== undefined && spec.initialNodes.length !== spec.nodeCount) {
       throw new Error(
         `initialNodes has ${spec.initialNodes.length} entries but nodeCount is ${spec.nodeCount}`,
@@ -337,6 +359,52 @@ class Simulation {
       case 'heal': {
         this.network = healPartitions(this.network)
         this.record({ kind: 'heal' }, this.queue.now, [])
+        return
+      }
+
+      case 'change-configuration': {
+        // §6 — like a client request, only the leader can act on it, and a follower
+        // redirects. Reusing that path is not laziness: a membership change *is* a
+        // client request, which is why the paper describes it as one.
+        const node = this.nodes[action.node]
+        if (node === undefined) return
+        if (this.crashed[action.node] === true || node.role !== 'leader') {
+          const target = redirected ? null : node.leaderId
+          this.record(
+            {
+              kind: 'change-configuration',
+              node: action.node,
+              servers: action.servers,
+              accepted: false,
+              redirectedTo: target,
+            },
+            this.queue.now,
+            [],
+          )
+          if (!redirected && target !== null) {
+            this.queue.scheduleAfter(0, {
+              kind: 'action',
+              action: { ...action, node: target, at: this.queue.now },
+              redirected: true,
+            })
+          }
+          return
+        }
+        const applied = this.deliver(action.node, {
+          type: 'change-configuration',
+          servers: action.servers,
+        })
+        this.record(
+          {
+            kind: 'change-configuration',
+            node: action.node,
+            servers: action.servers,
+            accepted: true,
+            redirectedTo: null,
+          },
+          this.queue.now,
+          applied,
+        )
         return
       }
 

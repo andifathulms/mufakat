@@ -16,6 +16,7 @@ const FLAG_CODES: Record<string, string> = {
   termIncrementOnCandidacy: 'ti',
   stepDownOnHigherTerm: 'sd',
   persistVotedFor: 'pv',
+  jointConsensus: 'jc',
 }
 
 export default function ScenariosPage({ params }: { params: { locale: string } }) {
