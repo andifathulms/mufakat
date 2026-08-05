@@ -8,23 +8,12 @@
  * survives both colour blindness and a greyscale screenshot.
  */
 
+import { NodeShape, ROLE_BADGE } from '@/components/cluster/glyph'
 import type { Dictionary } from '@/lib/i18n'
 import { describeConfiguration, isMember, type Configuration } from '@/lib/raft/configuration'
 import { configurationOf } from '@/lib/raft/log'
-import type { NodeState, Role } from '@/lib/raft/types'
+import type { NodeState } from '@/lib/raft/types'
 import type { InFlight, TraceStep } from '@/lib/sim/trace'
-
-const ROLE_FILL: Record<Role, string> = {
-  follower: 'fill-follower',
-  candidate: 'fill-candidate',
-  leader: 'fill-leader',
-}
-
-const ROLE_BADGE: Record<Role, string> = {
-  follower: 'F',
-  candidate: 'C',
-  leader: 'L',
-}
 
 interface Props {
   readonly step: TraceStep
@@ -43,23 +32,6 @@ function position(index: number, count: number): { x: number; y: number } {
   // always drawn the same way, so screenshots between runs are comparable.
   const angle = (index / count) * Math.PI * 2 - Math.PI / 2
   return { x: CENTRE + Math.cos(angle) * RADIUS, y: CENTRE + Math.sin(angle) * RADIUS }
-}
-
-/** Follower is a circle, candidate a diamond, leader a square. Shape, not just hue. */
-function NodeGlyph({ role, crashed }: { role: Role; crashed: boolean }) {
-  const className = `${crashed ? 'fill-stock-deep' : ROLE_FILL[role]} stroke-ink`
-  if (crashed) {
-    return <circle r="22" className={className} strokeWidth="1.5" strokeDasharray="3 3" />
-  }
-  switch (role) {
-    case 'leader':
-      return <rect x="-21" y="-21" width="42" height="42" className={className} strokeWidth="1.5" />
-    case 'candidate':
-      return <rect x="-20" y="-20" width="40" height="40" transform="rotate(45)" className={className} strokeWidth="1.5" />
-    case 'follower':
-    default:
-      return <circle r="22" className={className} strokeWidth="1.5" />
-  }
 }
 
 function slipLabel(flight: InFlight): string {
@@ -188,7 +160,7 @@ export function NodeRing({ step, dict, onNodeAction, selected, onSelect }: Props
                   strokeDasharray="1 4"
                 />
               )}
-              <NodeGlyph role={node.role} crashed={crashed} />
+              <NodeShape role={node.role} crashed={crashed} />
               {/* The digit sits on the role fill, so its colour has to follow the
                   fill's lightness: pale ink on the deep blue leader, dark ink on the
                   mid-toned follower and the amber candidate. Set at 19px bold, which
