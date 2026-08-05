@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { IBM_Plex_Sans, JetBrains_Mono, Source_Serif_4 } from 'next/font/google'
+import { ServiceWorker } from '@/components/ServiceWorker'
 import './globals.css'
 
 /**
@@ -35,7 +36,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id" className={`${mono.variable} ${serif.variable} ${sans.variable}`}>
-      <body className="bg-stock text-ink font-sans antialiased">{children}</body>
+      <body className="bg-stock text-ink font-sans antialiased">
+        {children}
+        <ServiceWorker />
+      </body>
     </html>
   )
 }

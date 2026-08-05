@@ -81,6 +81,33 @@ jobs:
           test -f out/.nojekyll || { echo "out/.nojekyll is missing"; exit 1; }
           test -f out/index.html || { echo "out/index.html is missing"; exit 1; }
           test -f out/id/simulasi/index.html || { echo "the simulation page is missing"; exit 1; }
+          test -f out/sw.js || { echo "the service worker was not generated"; exit 1; }
+          # The offline claim in PRD section 12 is only as good as the manifest, so
+          # check every route and every build asset is actually in it.
+          node --input-type=module -e '
+            import { readFile, readdir } from "node:fs/promises"
+            import { join, relative, sep } from "node:path"
+            const sw = await readFile("out/sw.js", "utf8")
+            const walk = async (d) => (await Promise.all(
+              (await readdir(d, { withFileTypes: true })).map((e) =>
+                e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)])
+            )).flat()
+            const files = (await walk("out"))
+              .map((f) => relative("out", f).split(sep).join("/"))
+              .filter((f) => f !== "sw.js" && f !== ".nojekyll")
+            const missing = files.filter((f) => !sw.includes(`"/mufakat/${f}"`))
+            if (missing.length) {
+              console.error("not precached:", missing.join(", "))
+              process.exit(1)
+            }
+            for (const route of ["/mufakat/", "/mufakat/id/", "/mufakat/id/simulasi/"]) {
+              if (!sw.includes(`"${route}"`)) {
+                console.error("route not precached:", route)
+                process.exit(1)
+              }
+            }
+            console.log(`Service worker precaches ${files.length} files and every route.`)
+          '
 
       - uses: actions/upload-pages-artifact@v3
         with:

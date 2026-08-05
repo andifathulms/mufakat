@@ -5,7 +5,7 @@
   "description": "Raft consensus simulator with deterministic simulation, invariant checking, and rule ablation.",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/generate-sw.mjs",
     "preview": "node scripts/preview.mjs",
     "test": "vitest",
     "test:run": "vitest run",

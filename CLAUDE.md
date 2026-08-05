@@ -148,7 +148,18 @@ tests/
 
 ## Deployment
 
-`main` builds and deploys via Actions; the fuzz suite gates it. `basePath` must match the repository name; `.nojekyll` must exist in `out/`. Verify with `pnpm preview` before pushing.
+Live at **https://andifathulms.github.io/mufakat/**, from `main` via Actions; the fuzz
+suite gates it. `basePath` must match the repository name; `.nojekyll` must exist in
+`out/`. Verify with `pnpm preview` before pushing.
+
+`pnpm build` runs `scripts/generate-sw.mjs` after `next build`, generating the service
+worker *from* the export — the precache manifest is the actual file list, and the cache
+name is a hash of their contents, so a rebuild that changes nothing does not evict a
+working cache. CI fails the build if any emitted file or route is missing from the
+manifest, because "works offline" is a claim worth checking rather than asserting.
+
+Do not pass `version:` to `pnpm/action-setup`: `packageManager` in package.json is the
+pin, and setting both makes the action refuse to start.
 
 ## Framing
 
@@ -192,6 +203,10 @@ conformance. That omission is stated on the type rather than hidden.
 The fuzz suite draws a compaction threshold, and asserts §7 is genuinely exercised —
 snapshots transferred, and both Figure 13 receiver rules taken — so a compaction bug
 cannot hide behind a suite where servers never discard anything.
+
+**Offline works.** A service worker generated from the export precaches all 62 files
+and every route; the app loads and simulates with the network off, including pages not
+visited before going offline. That closes the last unmet success criterion in PRD §12.
 
 Not done, and deliberately so:
 
