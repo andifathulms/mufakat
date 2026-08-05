@@ -21,6 +21,64 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * A small set of repeated objects, named once.
+ *
+ * These were previously eight-utility strings copied between components, which meant
+ * a button on the timeline and a button in the toolbar drifted apart by a pixel of
+ * padding and a border colour. A panel is a panel; say so in one place.
+ */
+@layer components {
+  /* A leaf of paper on the desk. */
+  .card {
+    @apply border border-ink-rule bg-stock-raised shadow-card;
+  }
+
+  /* The heading strip a panel is filed under, in the register of a ledger tab. */
+  .panel-head {
+    @apply flex items-baseline gap-2 border-b border-ink-rule px-3 py-2;
+  }
+
+  .panel-title {
+    @apply font-serif text-base leading-none text-ink;
+  }
+
+  /* Controls. `btn` is the quiet default; a page should have at most one `btn-strong`. */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 border border-ink-edge bg-stock-raised
+           px-3 py-1.5 font-sans text-label text-ink transition-colors hover:bg-stock-deep
+           disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-stock-raised;
+  }
+
+  .btn-strong {
+    @apply border-2 border-ink bg-ink px-4 py-2 text-stock-pale hover:bg-ink-soft;
+  }
+
+  .btn-small {
+    @apply px-2 py-1 text-micro;
+  }
+
+  /* Vermilion on a control is only ever a route to, or out of, a broken run. */
+  .btn-violation {
+    @apply border-vermilion bg-stock-raised text-vermilion hover:bg-vermilion hover:text-stock-pale;
+  }
+
+  /* A small standing label: a term, a role, a paper section. */
+  .chip {
+    @apply inline-flex items-center gap-1 border border-ink-rule bg-stock-pale px-1.5 py-0.5
+           font-mono text-micro text-ink-soft;
+  }
+
+  .field-label {
+    @apply font-sans text-micro font-medium uppercase tracking-wide text-ink-faint;
+  }
+
+  /* Prose written for someone who has not read the paper. */
+  .plain {
+    @apply font-sans text-body text-ink-soft;
+  }
+}
+
 /* Numeric content — terms, indices, node ids — is set in tabular figures so that
    columns align down the page the way a ruled ledger does. */
 .tabular {

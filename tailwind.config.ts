@@ -18,6 +18,10 @@ const config: Config = {
           DEFAULT: '#E9EDE4',
           deep: '#DCE2D5',
           pale: '#F2F5EE',
+          // A leaf laid on the desk: the surface a panel sits on, one step lighter
+          // than the page so a card reads as an object rather than an outline. The
+          // hue is the same paper, only nearer the light.
+          raised: '#F8FAF5',
         },
         ink: {
           DEFAULT: '#1E2321',
@@ -47,6 +51,28 @@ const config: Config = {
       },
       fontVariantNumeric: {
         tabular: 'tabular-nums',
+      },
+      /**
+       * A named scale, because the app was previously written almost entirely at 11
+       * and 12px — which flattened the hierarchy until a section heading, a field
+       * label and a safety violation all read at the same weight. Each name says what
+       * the size is *for*, so the choice is a decision about role rather than about
+       * pixels.
+       */
+      fontSize: {
+        micro: ['0.75rem', { lineHeight: '1.1rem' }],
+        label: ['0.8125rem', { lineHeight: '1.15rem' }],
+        data: ['0.8125rem', { lineHeight: '1.3rem' }],
+        body: ['0.9375rem', { lineHeight: '1.65' }],
+        lede: ['1.125rem', { lineHeight: '1.6' }],
+      },
+      boxShadow: {
+        // Paper on paper, not a floating panel. Barely there by design.
+        card: '0 1px 0 0 rgb(30 35 33 / 0.04), 0 1px 3px 0 rgb(30 35 33 / 0.05)',
+      },
+      maxWidth: {
+        // A measure prose can actually be read at — roughly 68 characters at 15px.
+        prose: '34rem',
       },
     },
   },
