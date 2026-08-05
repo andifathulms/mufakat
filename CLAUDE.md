@@ -206,7 +206,21 @@ cannot hide behind a suite where servers never discard anything.
 
 **Offline works.** A service worker generated from the export precaches all 62 files
 and every route; the app loads and simulates with the network off, including pages not
-visited before going offline. That closes the last unmet success criterion in PRD §12.
+visited before going offline. Verified against the deployed site, not only locally.
+
+**Every success criterion in PRD §12 is met**, measured rather than assumed:
+
+| Criterion | Measured |
+|---|---|
+| Five properties across 10,000 fuzz runs | green, with compaction on |
+| Every toggle breaks its property, none when on | 6/6, both directions |
+| Figure 8 reproduces exactly | panel by panel, terms 2/3/4/5 |
+| Byte-identical trace for the same inputs | digest equality across the library |
+| Liveness under an eventually-reliable network | 120 seeds |
+| Every ablation rule cites its paper section | asserted in the suite |
+| Violation within four interactions | two clicks from the home page |
+| Fully offline after first load | 72 cached entries, verified offline |
+| JS ≤ 250 KB gzipped | **149 KB** first load |
 
 Not done, and deliberately so:
 
