@@ -6,3 +6,7 @@ next-env.d.ts
 .DS_Store
 .env*.local
 coverage/
+
+# Brand masters: every size, colour variant, lockup and wordmark. The subset the
+# site actually serves is copied into public/ and is tracked — CI builds from that.
+exports/
