@@ -3,7 +3,7 @@
  * `basePath` must match the repository name.
  */
 const isProd = process.env.NODE_ENV === 'production'
-const basePath = isProd ? '/mufakat' : ''
+const basePath = isProd ? '/raft-simulator' : ''
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

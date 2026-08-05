@@ -10,7 +10,7 @@ import { useEffect } from 'react'
  * lose an afternoon.
  *
  * The scope is the basePath, which is what a project page needs — a worker registered
- * at `/mufakat/` may only ever intercept requests beneath it, and cannot affect
+ * at `/raft-simulator/` may only ever intercept requests beneath it, and cannot affect
  * anything else served from the same github.io origin.
  */
 export function ServiceWorker() {

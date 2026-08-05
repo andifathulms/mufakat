@@ -98,12 +98,12 @@ jobs:
             const files = (await walk("out"))
               .map((f) => relative("out", f).split(sep).join("/"))
               .filter((f) => f !== "sw.js" && f !== ".nojekyll")
-            const missing = files.filter((f) => !sw.includes(`"/mufakat/${f}"`))
+            const missing = files.filter((f) => !sw.includes(`"/raft-simulator/${f}"`))
             if (missing.length) {
               console.error("not precached:", missing.join(", "))
               process.exit(1)
             }
-            for (const route of ["/mufakat/", "/mufakat/id/", "/mufakat/id/simulasi/"]) {
+            for (const route of ["/raft-simulator/", "/raft-simulator/en/", "/raft-simulator/en/simulasi/"]) {
               if (!sw.includes(`"${route}"`)) {
                 console.error("route not precached:", route)
                 process.exit(1)

@@ -6,7 +6,7 @@ import { createServer } from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
 import { join, extname, normalize } from 'node:path'
 
-const BASE_PATH = '/mufakat'
+const BASE_PATH = '/raft-simulator'
 const ROOT = join(process.cwd(), 'out')
 const PORT = Number(process.env.PORT ?? 4321)
 

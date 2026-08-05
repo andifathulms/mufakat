@@ -6,7 +6,7 @@
  * a rule was switched off. This is how someone sends a colleague a live Figure 8.
  *
  * There is no server, so the hash is the whole state. It is kept short and readable
- * rather than opaque: someone who reads a Mufakat link should be able to see that
+ * rather than opaque: someone who reads a shared link should be able to see that
  * `!er` means the election restriction was disabled.
  */
 

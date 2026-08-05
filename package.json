@@ -1,5 +1,5 @@
 {
-  "name": "mufakat",
+  "name": "raft-simulator",
   "version": "0.1.0",
   "private": true,
   "description": "Raft consensus simulator with deterministic simulation, invariant checking, and rule ablation.",

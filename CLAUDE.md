@@ -1,4 +1,4 @@
-# CLAUDE.md — Mufakat
+# CLAUDE.md — Raft Simulator
 
 Raft consensus simulator with deterministic discrete-event simulation, continuous safety-invariant checking, and an ablation mode that disables individual Raft rules so the guarantee they protect visibly fails. Static site, GitHub Pages, no backend.
 
@@ -134,7 +134,9 @@ tests/
 - Integers only. Terms, indices, node ids, and virtual timestamps are all integers. No floats anywhere in simulation, including in network latency — use integer ticks.
 - Log indices are **1-based**, matching the paper. Do not silently switch to 0-based for array convenience; keep the paper's numbering and handle the offset in one documented place.
 - Field names match the paper exactly: `currentTerm`, `votedFor`, `commitIndex`, `lastApplied`, `nextIndex`, `matchIndex`, `prevLogIndex`, `prevLogTerm`. A reader should be able to hold the paper beside the code.
-- Algorithm terms stay in English in code and UI. Interface copy is Indonesian.
+- Algorithm terms stay in English in code and UI. Interface copy is English first, with a
+  complete Indonesian translation — every reader-facing string exists in both, including
+  scenario titles and summaries. `LOCALES` is `['en', 'id']` and `DEFAULT_LOCALE` is `en`.
 - Scenario ids stable and readable: `split-vote`, `partition-stranded-leader`, `figure-8`, `log-divergence-repair`. They appear in shared URLs.
 - Tailwind utilities inline; semantic tokens in `tailwind.config.ts` — `stock`, `ink`, `follower`, `candidate`, `leader`, `committed`, `vermilion`. Never raw hex in components.
 
@@ -150,7 +152,7 @@ tests/
 
 ## Deployment
 
-Live at **https://andifathulms.github.io/mufakat/**, from `main` via Actions; the fuzz
+Live at **https://andifathulms.github.io/raft-simulator/**, from `main` via Actions; the fuzz
 suite gates it. `basePath` must match the repository name; `.nojekyll` must exist in
 `out/`. Verify with `pnpm preview` before pushing.
 

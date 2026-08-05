@@ -1,4 +1,4 @@
-# Mufakat
+# Raft Simulator
 
 **A Raft consensus simulator where you can break the algorithm on purpose.**
 
@@ -6,10 +6,8 @@ Deterministic discrete-event simulation, continuous safety-invariant checking, a
 ablation mode that turns individual Raft rules off so you can watch the guarantee they
 protect actually fail.
 
-> *mufakat* (Indonesian) — consensus, agreement reached through deliberation.
-
-**[andifathulms.github.io/mufakat](https://andifathulms.github.io/mufakat/)** — works
-offline after first load.
+**[andifathulms.github.io/raft-simulator](https://andifathulms.github.io/raft-simulator/)** —
+works offline after first load. English and Indonesian.
 
 ## Prior art
 
@@ -19,7 +17,7 @@ you want to watch Raft run, start there. [*The Secret Lives of
 Data*](http://thesecretlivesofdata.com/raft/) is a fine scroll-driven explainer.
 
 This project is not a replacement for either. Its contribution is narrower: **ablation and
-invariant checking**. RaftScope shows you the mechanism; Mufakat lets you switch a rule off
+invariant checking**. RaftScope shows you the mechanism; this lets you switch a rule off
 and watch the safety property it defends break, while five invariant indicators tell you
 exactly which one failed and why.
 

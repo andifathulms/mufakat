@@ -1,9 +1,11 @@
-# PRD — Mufakat
+# PRD — Raft Simulator
 
 **A Raft consensus simulator where you can break the algorithm on purpose. Deterministic discrete-event simulation, continuous safety-invariant checking, and an ablation mode that turns individual Raft rules off so you can watch the guarantee they protect actually fail.**
 
-> *mufakat* (Indonesian) — consensus, agreement reached through deliberation. From *musyawarah mufakat*, the deliberative decision-making principle in the fourth *sila* of Pancasila.
-> An unusually exact name: the project simulates a consensus algorithm, and *mufakat* is the Indonesian word for the thing being simulated. Slug used throughout as `mufakat`.
+> Shipped as **Raft Simulator**, at `raft-simulator`. The project was called *Mufakat* —
+> Indonesian for consensus reached through deliberation — through M0–M7; the name was an
+> exact one, but a visitor who does not read Indonesian could not tell what the app was,
+> which for a teaching tool is the whole ballgame.
 
 | | |
 |---|---|
@@ -11,7 +13,7 @@
 | **Owner** | Andi Fathul Mukminin Salahuddin |
 | **Type** | Personal portfolio project, open source, educational |
 | **Deployment** | GitHub Pages (static export, no server) |
-| **Language** | Indonesian-first UI; English secondary. Algorithm terms stay in English. |
+| **Language** | English-first UI; Indonesian a full second translation. Algorithm terms stay in English. |
 | **Normative source** | Ongaro & Ousterhout, *In Search of an Understandable Consensus Algorithm* (USENIX ATC 2014), extended version — Figure 2 in particular. Plus Ongaro's 2014 Stanford thesis, *Consensus: Bridging Theory and Practice*. |
 
 ---
@@ -179,7 +181,7 @@ The material world is the **ledger book**: ruled columns, entries in numbered ro
 
 **Motion.** One orchestrated moment: a message slip travelling between nodes, landing, and the receiving node's row updating. Election timeouts show as a thin depleting rule under each follower — the only ambient motion, and it encodes real information about what is about to happen. `prefers-reduced-motion` disables autoplay and keeps stepping instantaneous.
 
-**Copy.** Indonesian first for interface and explanation; algorithm terms stay in English — *term*, *leader*, *commit index*, *AppendEntries* — because a reader should recognise them in the paper afterwards. Every rule in the ablation panel cites its paper section. Violations are stated flatly, with the mechanism named, never with alarm language.
+**Copy.** English first for interface and explanation, Indonesian a complete second translation rather than a partial one; algorithm terms stay in English — *term*, *leader*, *commit index*, *AppendEntries* — because a reader should recognise them in the paper afterwards. Every rule in the ablation panel cites its paper section. Violations are stated flatly, with the mechanism named, never with alarm language.
 
 ## 11. Milestones
 
