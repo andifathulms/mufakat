@@ -27,8 +27,13 @@ export default function ScenariosPage({ params }: { params: { locale: string } }
   return (
     <div className="flex flex-col gap-6">
       <header className="max-w-3xl">
-        <h1 className="font-serif text-3xl">{dict.nav.scenarios}</h1>
-        <p className="mt-2 font-sans text-sm leading-relaxed text-ink-soft">
+        <h1 className="font-serif text-3xl sm:text-4xl">{dict.nav.scenarios}</h1>
+        <p className="mt-3 max-w-prose plain">
+          {locale === 'id'
+            ? 'Tiap skenario adalah satu situasi yang dibangun tangan untuk menunjukkan satu hal — pemilihan yang bersih, dua calon yang saling mengunci, jaringan yang terbelah. Buka salah satu, lalu tekan Jalankan.'
+            : 'Each scenario is one hand-built situation showing one thing — a clean election, two candidates deadlocking each other, a network cut in half. Open one and press play.'}
+        </p>
+        <p className="mt-3 max-w-prose font-sans text-label leading-relaxed text-ink-faint">
           {dict.scenarios.lede}
         </p>
       </header>
@@ -38,21 +43,19 @@ export default function ScenariosPage({ params }: { params: { locale: string } }
           const descriptor =
             entry.ablation === undefined ? null : descriptorFor(entry.ablation.flag)
           return (
-            <li key={entry.id} className="flex flex-col border border-ink-rule bg-stock-pale p-4">
-              <h2 className="font-serif text-xl">{entry.title}</h2>
-              <p className="mt-0.5 font-mono text-[11px] text-ink-faint">{entry.id}</p>
-              <p className="mt-2 font-sans text-sm leading-relaxed">{entry.summary}</p>
+            <li key={entry.id} className="card flex flex-col p-5">
+              <h2 className="font-serif text-xl leading-snug">{entry.title}</h2>
+              <p className="mt-0.5 font-mono text-micro text-ink-faint">{entry.id}</p>
+              <p className="mt-2.5 font-sans text-body leading-relaxed">{entry.summary}</p>
 
-              <div className="mt-3 border-t border-ink-rule pt-2">
-                <h3 className="font-sans text-[11px] uppercase tracking-wide text-ink-faint">
-                  {dict.scenarios.phenomenon}
-                </h3>
-                <p className="mt-1 font-sans text-xs leading-relaxed text-ink-soft">
+              <div className="mt-3.5 border-t border-ink-rule pt-2.5">
+                <h3 className="field-label">{dict.scenarios.phenomenon}</h3>
+                <p className="mt-1 font-sans text-label leading-relaxed text-ink-soft">
                   {entry.phenomenon[locale]}
                 </p>
               </div>
 
-              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-0.5 font-mono text-[11px] text-ink-faint">
+              <dl className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-0.5 font-mono text-micro text-ink-faint">
                 <div className="flex gap-2">
                   <dt>nodes:</dt>
                   <dd className="text-ink-soft tabular">{entry.spec.nodeCount}</dd>
@@ -73,17 +76,14 @@ export default function ScenariosPage({ params }: { params: { locale: string } }
                 </div>
               </dl>
 
-              <div className="mt-4 flex flex-wrap gap-2 font-sans text-xs">
-                <Link
-                  href={`/${locale}/simulasi/#s=${entry.id}`}
-                  className="border border-ink px-3 py-1 hover:bg-ink hover:text-stock"
-                >
+              <div className="mt-auto flex flex-wrap gap-2 pt-5">
+                <Link href={`/${locale}/simulasi/#s=${entry.id}`} className="btn btn-strong">
                   {dict.scenarios.open}
                 </Link>
                 {entry.ablation !== undefined && descriptor !== null && (
                   <Link
                     href={`/${locale}/simulasi/#s=${entry.id}&off=${FLAG_CODES[entry.ablation.flag]}`}
-                    className="border border-vermilion px-3 py-1 text-vermilion hover:bg-vermilion hover:text-stock"
+                    className="btn btn-violation"
                   >
                     {dict.scenarios.breaksWith}:{' '}
                     {dict.ablation.rules[entry.ablation.flag]?.title ?? entry.ablation.flag}
@@ -91,7 +91,7 @@ export default function ScenariosPage({ params }: { params: { locale: string } }
                 )}
               </div>
               {entry.ablation !== undefined && (
-                <p className="mt-2 font-mono text-[11px] text-ink-faint">
+                <p className="mt-2.5 font-mono text-micro text-ink-faint">
                   {dict.ablation.protects}: {dict.invariants.names[entry.ablation.breaks]} ·{' '}
                   {descriptor?.paperSection}
                 </p>

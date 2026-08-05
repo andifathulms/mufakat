@@ -43,33 +43,43 @@ export function AblationPanel({ flags, onToggle, onReset, dict, locale, compact 
             <li
               key={flag}
               className={[
-                'border p-3',
-                enabled ? 'border-ink-rule bg-stock-pale' : 'border-vermilion bg-vermilion/5',
+                'border p-4',
+                enabled ? 'border-ink-rule bg-stock-raised' : 'border-vermilion bg-vermilion/5',
               ].join(' ')}
             >
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-3.5">
+                {/* The switch states its position in a word as well as a colour, and
+                    its off position is vermilion because off means a broken run. */}
                 <button
                   type="button"
                   role="switch"
                   aria-checked={enabled}
+                  aria-label={copy?.title ?? flag}
                   onClick={() => onToggle(flag, !enabled)}
                   className={[
-                    'mt-0.5 shrink-0 border px-2 py-1 font-mono text-[11px] font-bold w-16',
+                    'mt-0.5 w-16 shrink-0 border px-2 py-1.5 font-mono text-micro font-bold tracking-wide transition-colors',
                     enabled
-                      ? 'border-committed text-committed'
+                      ? 'border-committed text-committed hover:bg-committed hover:text-stock-pale'
                       : 'border-vermilion bg-vermilion text-stock-pale',
                   ].join(' ')}
                 >
                   {enabled ? dict.ablation.on : dict.ablation.off}
                 </button>
-                <div className="flex-1">
-                  <h3 className="font-mono text-sm">{copy?.title ?? flag}</h3>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-mono text-data font-bold">{copy?.title ?? flag}</h3>
+                  {/* What is at stake, said without jargon, before the paper citation
+                      that justifies it. This is the line that makes a toggle feel
+                      like a consequence rather than a preference. */}
+                  <p className="mt-1.5 font-sans text-label leading-relaxed text-ink">
+                    <span className="text-ink-faint">{dict.ablation.ifOff}: </span>
+                    {dict.plain.properties[descriptor.protects]}
+                  </p>
                   {!compact && (
-                    <p className="mt-1 font-sans text-xs leading-relaxed text-ink-soft">
+                    <p className="mt-2 max-w-prose font-sans text-label leading-relaxed text-ink-soft">
                       {copy?.body}
                     </p>
                   )}
-                  <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-0.5 font-mono text-[11px] text-ink-faint sm:grid-cols-2">
+                  <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1 border-t border-ink-rule pt-2.5 font-mono text-micro text-ink-faint sm:grid-cols-2">
                     <Row label={dict.ablation.protects}>
                       {dict.invariants.names[descriptor.protects]}
                     </Row>
@@ -99,7 +109,7 @@ export function AblationPanel({ flags, onToggle, onReset, dict, locale, compact 
         type="button"
         onClick={onReset}
         disabled={!isModifiedRaft(flags)}
-        className="self-start border border-ink px-3 py-1 font-sans text-xs hover:bg-stock-deep disabled:opacity-35"
+        className="btn self-start border-ink"
       >
         {dict.ablation.reset}
       </button>
@@ -123,19 +133,31 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export function ModifiedBanner({ flags, dict }: { flags: AblationFlags; dict: Dictionary }) {
   if (!isModifiedRaft(flags)) {
     return (
-      <p className="border border-committed bg-committed/10 px-3 py-2 font-sans text-xs text-ink">
+      <p className="flex items-center gap-2 border border-committed bg-committed/10 px-3 py-2 font-sans text-label text-ink">
+        <span
+          aria-hidden
+          className="inline-flex h-4 w-4 shrink-0 items-center justify-center border border-committed bg-committed text-[10px] font-bold leading-none text-stock-pale"
+        >
+          ✓
+        </span>
         {dict.ablation.unmodified}
       </p>
     )
   }
   const off = ABLATION_FLAG_NAMES.filter((flag) => !flags[flag])
   return (
-    <div className="border-2 border-vermilion bg-vermilion/10 px-3 py-2">
-      <p className="font-mono text-sm font-bold tracking-wide text-vermilion">
+    /* The tint is 5%, not 10%: vermilion text on a 10% vermilion wash over the page
+       measures 4.39:1, under AA, and this is the one label in the application that
+       must not be hard to read. At 5% it is 4.72:1, and the 2px border carries the
+       alarm anyway. */
+    <div className="border-2 border-vermilion bg-vermilion/5 px-4 py-3">
+      <p className="font-mono text-base font-bold tracking-wide text-vermilion">
         {dict.ablation.modified}
       </p>
-      <p className="mt-1 font-sans text-xs text-ink">{dict.ablation.modifiedLong}</p>
-      <p className="mt-1 font-mono text-[11px] text-ink-soft">
+      <p className="mt-1.5 max-w-prose font-sans text-label leading-relaxed text-ink">
+        {dict.ablation.modifiedLong}
+      </p>
+      <p className="mt-2 font-mono text-micro text-ink-soft">
         {off.map((flag) => dict.ablation.rules[flag]?.title ?? flag).join(' · ')}
       </p>
     </div>
