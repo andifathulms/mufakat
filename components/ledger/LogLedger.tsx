@@ -36,15 +36,15 @@ export function LogLedger({ step, dict }: Props) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-xs font-mono tabular">
-        <caption className="caption-bottom pt-2 text-left text-[11px] text-ink-faint font-sans">
+      <table className="w-full border-collapse font-mono text-data tabular">
+        <caption className="caption-bottom pt-3 text-left font-sans text-micro leading-relaxed text-ink-faint">
           {dict.ledger.legend}
         </caption>
         <thead>
           <tr>
             <th
               scope="col"
-              className="border-b-2 border-ink px-2 py-1 text-right font-sans text-[11px] text-ink-soft w-14"
+              className="w-14 border-b-2 border-b-ink px-2 py-1.5 text-right font-sans text-micro font-medium text-ink-soft"
             >
               {dict.ledger.index}
             </th>
@@ -52,10 +52,10 @@ export function LogLedger({ step, dict }: Props) {
               <th
                 key={node.id}
                 scope="col"
-                className="border-b-2 border-ink border-l border-ink-rule px-2 py-1 font-sans text-[11px]"
+                className="border-b-2 border-l border-b-ink border-l-ink-rule px-2 py-1.5 font-sans text-micro"
               >
                 <span className="block">node {node.id}</span>
-                <span className="block text-ink-faint">
+                <span className="block font-mono text-ink-faint">
                   {node.role === 'leader' ? 'L' : node.role === 'candidate' ? 'C' : 'F'}·t
                   {node.currentTerm}
                 </span>
@@ -68,7 +68,7 @@ export function LogLedger({ step, dict }: Props) {
             <tr key={index} className={disagreements.has(index) ? 'bg-stock-deep' : undefined}>
               <th
                 scope="row"
-                className="border-b border-ink-rule px-2 py-1 text-right text-ink-faint font-normal"
+                className="border-b border-ink-rule px-2 py-1.5 text-right font-normal text-ink-faint"
               >
                 {index}
               </th>
@@ -93,7 +93,7 @@ export function LogLedger({ step, dict }: Props) {
             <tr>
               <td
                 colSpan={step.nodes.length + 1}
-                className="px-2 py-6 text-center text-ink-faint font-sans"
+                className="px-2 py-10 text-center font-sans text-body text-ink-faint"
               >
                 {dict.ledger.empty}
               </td>
@@ -194,7 +194,7 @@ function Cell({
 
 function Legend({ dict }: { dict: Dictionary }) {
   return (
-    <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-sans text-ink-soft">
+    <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-ink-rule pt-3 font-sans text-micro text-ink-soft">
       <li className="flex items-center gap-1.5">
         <span className="inline-block w-5 text-center border border-committed text-committed text-[10px] font-bold">
           2

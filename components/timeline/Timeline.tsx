@@ -118,7 +118,7 @@ export function Timeline({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5 text-xs font-sans">
+      <div className="flex flex-wrap items-center gap-1.5 font-sans text-label">
         <Button onClick={() => { onPlaying(false); onStep(0) }} label="⏮" title={dict.sim.start} />
         <Button
           onClick={() => { onPlaying(false); onStep(Math.max(0, step - 1)) }}
@@ -128,7 +128,7 @@ export function Timeline({
         <button
           type="button"
           onClick={() => onPlaying(!playing)}
-          className="border border-ink px-3 py-1 hover:bg-stock-deep min-w-[5rem]"
+          className="btn min-w-[6rem] border-ink font-medium"
         >
           {playing ? dict.sim.pause : dict.sim.play}
         </button>
@@ -144,7 +144,7 @@ export function Timeline({
           <select
             value={speed}
             onChange={(event) => onSpeed(Number(event.target.value))}
-            className="border border-ink-edge bg-stock-pale px-1 py-0.5"
+            className="border border-ink-edge bg-stock-pale px-1.5 py-1"
           >
             {[0.5, 1, 2, 4, 8].map((option) => (
               <option key={option} value={option}>
@@ -154,12 +154,15 @@ export function Timeline({
           </select>
         </label>
 
-        <span className="ml-auto font-mono tabular text-ink-soft">
+        <span className="ml-auto font-mono text-micro tabular text-ink-faint">
           {dict.sim.step} {step}/{last} · {dict.sim.time} {current?.time ?? 0}
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 text-[11px] font-sans">
+      {/* Jump to the next thing worth looking at. Scrubbing an event at a time is
+          how you inspect a run; these are how you find the moment worth inspecting. */}
+      <div className="flex flex-wrap items-center gap-1.5 font-sans text-micro">
+        <span className="field-label mr-1">{dict.sim.jumpTo}</span>
         <Jump label={dict.sim.nextTerm} target={nextAfter(marks.terms, step)} onStep={onStep} onPlaying={onPlaying} />
         <Jump label={dict.sim.nextElection} target={nextAfter(marks.elections, step)} onStep={onStep} onPlaying={onPlaying} />
         <Jump label={dict.sim.nextCommit} target={nextAfter(marks.commits, step)} onStep={onStep} onPlaying={onPlaying} />
@@ -172,12 +175,20 @@ export function Timeline({
         />
       </div>
 
-      <p className="border border-ink-rule bg-stock-pale px-2 py-1 font-mono text-[11px] tabular text-ink-soft">
-        <span className="text-ink-faint">{dict.sim.event}: </span>
-        {current === undefined ? '—' : describeEvent(current.event)}
-      </p>
+      {/* The exact event, in the vocabulary of the paper. Folded away because the
+          sentence above the cluster already says what happened — this is here for
+          when the sentence is not precise enough, which for some readers is always. */}
+      <details className="border border-ink-rule bg-stock-pale">
+        <summary className="cursor-pointer px-2.5 py-1.5 font-sans text-micro text-ink-faint hover:text-ink">
+          {dict.plain.technicalDetail}
+        </summary>
+        <p className="border-t border-ink-rule px-2.5 py-1.5 font-mono text-micro tabular text-ink-soft">
+          <span className="text-ink-faint">{dict.sim.event}: </span>
+          {current === undefined ? '—' : describeEvent(current.event)}
+        </p>
+      </details>
       {trace.truncated && (
-        <p className="text-[11px] font-sans text-ink-faint">{dict.sim.truncated}</p>
+        <p className="font-sans text-micro text-ink-faint">{dict.sim.truncated}</p>
       )}
     </section>
   )
@@ -190,7 +201,7 @@ function Button({ onClick, label, title }: { onClick: () => void; label: string;
       onClick={onClick}
       title={title}
       aria-label={title}
-      className="border border-ink-edge px-2 py-1 hover:bg-stock-deep"
+      className="btn btn-small"
     >
       {label}
     </button>
@@ -220,8 +231,8 @@ function Jump({
         onStep(target)
       }}
       className={[
-        'border px-2 py-0.5 disabled:opacity-35 disabled:cursor-not-allowed',
-        danger ? 'border-vermilion text-vermilion' : 'border-ink-edge hover:bg-stock-deep',
+        'btn btn-small',
+        danger ? 'btn-violation' : '',
       ].join(' ')}
     >
       {label}

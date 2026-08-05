@@ -7,6 +7,11 @@
  * algorithm state or evaluates a property — when a component needs to know whether an
  * entry is committed, it reads `commitIndex` from the trace, and when it needs to
  * know whether Log Matching holds, it reads the checker's verdict.
+ *
+ * The reading order is deliberate: what you are running, then a sentence saying what
+ * just happened, then the three views, then the controls that move you through it.
+ * Somebody who has never seen Raft should be able to read down the page and follow
+ * it; somebody who has can start scrubbing immediately.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -14,12 +19,12 @@ import { AblationPanel, ModifiedBanner } from '@/components/ablation/AblationPan
 import { NodeRing } from '@/components/cluster/NodeRing'
 import { InvariantPanel } from '@/components/invariants/InvariantPanel'
 import { LogLedger } from '@/components/ledger/LogLedger'
+import { SimGuide } from '@/components/SimGuide'
 import { Timeline } from '@/components/timeline/Timeline'
 import { SCENARIOS, scenarioById } from '@/data/scenarios'
 import { dictionary, type Locale } from '@/lib/i18n'
+import { narrateEvent } from '@/lib/narrate'
 import { UNMODIFIED_RAFT, type AblationFlagName } from '@/lib/raft/rules'
-import { members } from '@/lib/raft/configuration'
-import { configurationOf } from '@/lib/raft/log'
 import { decodeShare, encodeShare, specFromShare, type ShareState } from '@/lib/share'
 import type { Action } from '@/lib/sim/simulation'
 import { commitSteps, electionSteps, termChangeSteps, violationSteps } from '@/lib/sim/trace'
@@ -87,13 +92,10 @@ export function Simulator({ locale }: { locale: Locale }) {
 
   const current = trace?.steps[step] ?? null
 
-  const addAction = useCallback(
-    (action: Action) => {
-      setPlaying(false)
-      setShare((state) => ({ ...state, extraActions: [...state.extraActions, action] }))
-    },
-    [],
-  )
+  const addAction = useCallback((action: Action) => {
+    setPlaying(false)
+    setShare((state) => ({ ...state, extraActions: [...state.extraActions, action] }))
+  }, [])
 
   const onNodeAction = useCallback(
     (node: number, kind: 'crash' | 'restart' | 'isolate') => {
@@ -128,171 +130,249 @@ export function Simulator({ locale }: { locale: Locale }) {
   const definition = scenarioById(share.scenarioId)
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 font-sans text-xs">
-          <span className="text-ink-faint">{dict.nav.scenarios}</span>
-          <select
-            value={share.scenarioId}
-            onChange={(event) => {
-              const id = event.target.value
-              const chosen = scenarioById(id)
-              setPlaying(false)
-              setStep(0)
-              setShare({
-                scenarioId: id,
-                seed: chosen.spec.seed,
-                flags: chosen.spec.flags,
-                extraActions: [],
-                step: null,
-              })
-            }}
-            className="border border-ink bg-stock-pale px-2 py-1 font-mono text-xs"
-          >
-            {SCENARIOS.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.id}
-              </option>
-            ))}
-          </select>
-        </label>
+    <div className="flex flex-col gap-5 pb-8">
+      {/* ---- What is loaded, and how to change it. ---- */}
+      <section className="card p-4" aria-label={dict.nav.scenarios}>
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+          <label className="flex min-w-[15rem] flex-1 flex-col gap-1.5">
+            <span className="field-label">{dict.nav.scenarios}</span>
+            {/* Titles, not slugs. `split-vote` means nothing until you already know
+                what a split vote is, which is exactly the wrong way round. */}
+            <select
+              value={share.scenarioId}
+              onChange={(event) => {
+                const id = event.target.value
+                const chosen = scenarioById(id)
+                setPlaying(false)
+                setStep(0)
+                setShare({
+                  scenarioId: id,
+                  seed: chosen.spec.seed,
+                  flags: chosen.spec.flags,
+                  extraActions: [],
+                  step: null,
+                })
+              }}
+              className="w-full border border-ink-edge bg-stock-pale px-2.5 py-2 font-sans text-label"
+            >
+              {SCENARIOS.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.title}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <label className="flex flex-col gap-1 font-sans text-xs">
-          <span className="text-ink-faint">{dict.sim.seed}</span>
-          <input
-            type="number"
-            value={share.seed}
-            onChange={(event) => {
-              const seed = Number(event.target.value)
-              if (!Number.isInteger(seed)) return
-              setPlaying(false)
-              setShare((state) => ({ ...state, seed }))
-            }}
-            className="w-24 border border-ink bg-stock-pale px-2 py-1 font-mono tabular text-xs"
-          />
-        </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="field-label">{dict.sim.seed}</span>
+            <input
+              type="number"
+              value={share.seed}
+              onChange={(event) => {
+                const seed = Number(event.target.value)
+                if (!Number.isInteger(seed)) return
+                setPlaying(false)
+                setShare((state) => ({ ...state, seed }))
+              }}
+              className="w-28 border border-ink-edge bg-stock-pale px-2.5 py-2 font-mono text-label tabular"
+            />
+          </label>
 
-        <button
-          type="button"
-          onClick={() => {
-            setPlaying(false)
-            setStep(0)
-            setShare((state) => ({ ...state, extraActions: [] }))
-          }}
-          className="border border-ink-edge px-3 py-1 font-sans text-xs hover:bg-stock-deep"
-        >
-          {dict.sim.rerun}
-        </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setPlaying(false)
+                setStep(0)
+                setShare((state) => ({ ...state, extraActions: [] }))
+              }}
+              className="btn"
+            >
+              {dict.sim.rerun}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const url = `${window.location.origin}${window.location.pathname}#${encodeShare({
+                  ...share,
+                  step,
+                })}`
+                void navigator.clipboard?.writeText(url).then(() => setCopied(true))
+              }}
+              className="btn"
+            >
+              {copied ? dict.sim.shared : dict.sim.share}
+            </button>
+          </div>
+        </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            const url = `${window.location.origin}${window.location.pathname}#${encodeShare({
-              ...share,
-              step,
-            })}`
-            void navigator.clipboard?.writeText(url).then(() => setCopied(true))
-          }}
-          className="border border-ink-rule px-3 py-1 font-sans text-xs hover:bg-stock-deep"
-        >
-          {copied ? dict.sim.shared : dict.sim.share}
-        </button>
-
-        <p className="ml-auto max-w-md font-sans text-xs text-ink-faint">{definition.summary}</p>
-      </div>
+        <div className="mt-3 border-t border-ink-rule pt-3">
+          <p className="max-w-prose font-sans text-label leading-relaxed text-ink-soft">
+            {definition.summary}
+          </p>
+          <p className="mt-1.5 max-w-prose font-sans text-micro leading-relaxed text-ink-faint">
+            <span className="font-medium">{dict.scenarios.phenomenon}: </span>
+            {definition.phenomenon[locale]}
+            <span className="ml-2 font-mono">{definition.id}</span>
+          </p>
+        </div>
+      </section>
 
       <ModifiedBanner flags={share.flags} dict={dict} />
 
       {error !== null && (
-        <p className="border border-vermilion bg-vermilion/10 px-3 py-2 font-mono text-xs text-vermilion">
+        <p className="border border-vermilion bg-vermilion/5 px-3 py-2 font-mono text-label text-vermilion">
           {error}
         </p>
       )}
 
       {trace === null || current === null ? (
-        <p className="py-16 text-center font-sans text-sm text-ink-faint">
+        <p className="py-24 text-center font-sans text-body text-ink-faint">
           {running ? dict.sim.computing : '—'}
         </p>
       ) : (
         <>
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)_minmax(0,300px)]">
-            <section aria-label={dict.sim.cluster} className="flex flex-col gap-3">
-              <h2 className="border-b border-ink font-serif text-lg">{dict.sim.cluster}</h2>
-              <NodeRing
-                step={current}
-                dict={dict}
-                selected={selected}
-                onSelect={setSelected}
-                onNodeAction={onNodeAction}
-              />
-              <div className="flex flex-wrap gap-2 font-sans text-xs">
-                {current.nodes.map((node) => (
-                  <button
-                    key={node.id}
-                    type="button"
-                    onClick={() => onSubmitEntry(node.id)}
-                    className="border border-ink-rule px-2 py-1 hover:bg-stock-deep"
-                  >
-                    {dict.sim.submit} → n{node.id}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => addAction({ at: current.time + 1, kind: 'heal' })}
-                  className="border border-ink-rule px-2 py-1 hover:bg-stock-deep"
-                >
-                  {dict.sim.heal}
-                </button>
+          {/*
+           * The sentence comes before the picture. Somebody watching the ring move
+           * without this is guessing; with it they are reading. The technical
+           * rendering is one fold away, in the timeline below.
+           */}
+          <section className="card border-l-4 border-l-leader p-4" aria-live="off">
+            <h2 className="field-label">{dict.plain.whatHappening}</h2>
+            <p className="mt-1.5 max-w-4xl font-serif text-lede leading-snug text-ink">
+              {narrateEvent(current.event, locale)}
+            </p>
+          </section>
+
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+            <div className="flex flex-col gap-5">
+              <section className="card" aria-label={dict.sim.cluster}>
+                <div className="panel-head">
+                  <h2 className="panel-title">{dict.sim.cluster}</h2>
+                  <span className="ml-auto font-mono text-micro tabular text-ink-faint">
+                    {dict.sim.time} {current.time}
+                  </span>
+                </div>
+                <div className="p-4">
+                  <NodeRing
+                    step={current}
+                    dict={dict}
+                    selected={selected}
+                    onSelect={setSelected}
+                    onNodeAction={onNodeAction}
+                  />
+                  <div className="mt-4 border-t border-ink-rule pt-3">
+                    <h3 className="field-label">{dict.sim.submit}</h3>
+                    <p className="mt-1 font-sans text-micro leading-relaxed text-ink-faint">
+                      {dict.sim.submitHint}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {current.nodes.map((node) => (
+                        <button
+                          key={node.id}
+                          type="button"
+                          onClick={() => onSubmitEntry(node.id)}
+                          className="btn btn-small font-mono"
+                        >
+                          n{node.id}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => addAction({ at: current.time + 1, kind: 'heal' })}
+                        className="btn btn-small ml-auto"
+                      >
+                        {dict.sim.heal}
+                      </button>
+                    </div>
+                  </div>
+                  <InFlightList step={current} dict={dict} />
+                </div>
+              </section>
+
+              <section className="card" aria-label={dict.sim.invariants}>
+                <div className="panel-head">
+                  <h2 className="panel-title">{dict.sim.invariants}</h2>
+                </div>
+                <div className="p-4">
+                  <p className="mb-3 font-sans text-micro leading-relaxed text-ink-faint">
+                    {dict.plain.invariantsHelp}
+                  </p>
+                  <InvariantPanel
+                    violations={trace.violations}
+                    upToStep={step}
+                    dict={dict}
+                    onJump={(target) => {
+                      setPlaying(false)
+                      setStep(target)
+                    }}
+                  />
+                </div>
+              </section>
+            </div>
+
+            <section className="card min-w-0" aria-label={dict.sim.ledger}>
+              <div className="panel-head">
+                <h2 className="panel-title">{dict.sim.ledger}</h2>
               </div>
-              <InFlightList step={current} dict={dict} />
-            </section>
-
-            <section aria-label={dict.sim.ledger} className="flex flex-col gap-3 min-w-0">
-              <h2 className="border-b border-ink font-serif text-lg">{dict.sim.ledger}</h2>
-              <LogLedger step={current} dict={dict} />
-            </section>
-
-            <section aria-label={dict.sim.invariants} className="flex flex-col gap-3">
-              <h2 className="border-b border-ink font-serif text-lg">{dict.sim.invariants}</h2>
-              <InvariantPanel
-                violations={trace.violations}
-                upToStep={step}
-                dict={dict}
-                onJump={(target) => {
-                  setPlaying(false)
-                  setStep(target)
-                }}
-              />
+              <div className="min-w-0 p-4">
+                <p className="mb-3 max-w-prose font-sans text-micro leading-relaxed text-ink-faint">
+                  {dict.plain.ledgerHelp}
+                </p>
+                <LogLedger step={current} dict={dict} />
+              </div>
             </section>
           </div>
 
-          <section className="border-t-2 border-ink pt-4">
-            <Timeline
-              trace={trace}
-              step={step}
-              onStep={setStep}
-              playing={playing}
-              onPlaying={setPlaying}
-              speed={speed}
-              onSpeed={setSpeed}
-              marks={marks}
-              dict={dict}
-            />
-          </section>
-
-          <details className="border-t border-ink-rule pt-4">
-            <summary className="cursor-pointer font-serif text-lg">{dict.nav.ablation}</summary>
-            <div className="mt-3 max-w-3xl">
-              <AblationPanel
-                flags={share.flags}
-                onToggle={onToggle}
-                onReset={() => setShare((state) => ({ ...state, flags: UNMODIFIED_RAFT }))}
+          <section className="card" aria-label={dict.sim.timeline}>
+            <div className="panel-head">
+              <h2 className="panel-title">{dict.sim.timeline}</h2>
+              <span className="ml-auto font-mono text-micro tabular text-ink-faint">
+                {dict.sim.step} {step}/{trace.steps.length - 1}
+              </span>
+            </div>
+            <div className="p-4">
+              <Timeline
+                trace={trace}
+                step={step}
+                onStep={setStep}
+                playing={playing}
+                onPlaying={setPlaying}
+                speed={speed}
+                onSpeed={setSpeed}
+                marks={marks}
                 dict={dict}
-                locale={locale}
-                compact
               />
             </div>
-          </details>
+          </section>
+
+          <SimGuide dict={dict} />
+
+          <section className="card">
+            <details>
+              <summary className="panel-head cursor-pointer list-none">
+                <h2 className="panel-title">{dict.nav.ablation}</h2>
+                <span className="ml-auto font-sans text-micro text-ink-faint">
+                  {dict.plain.readMore}
+                </span>
+              </summary>
+              <div className="p-4">
+                <p className="mb-4 max-w-prose font-sans text-label leading-relaxed text-ink-soft">
+                  {dict.plain.ablationHelp}
+                </p>
+                <div className="max-w-3xl">
+                  <AblationPanel
+                    flags={share.flags}
+                    onToggle={onToggle}
+                    onReset={() => setShare((state) => ({ ...state, flags: UNMODIFIED_RAFT }))}
+                    dict={dict}
+                    locale={locale}
+                    compact
+                  />
+                </div>
+              </div>
+            </details>
+          </section>
         </>
       )}
     </div>
@@ -303,18 +383,24 @@ function InFlightList({
   step,
   dict,
 }: {
-  step: { inFlight: readonly { message: { type: string; from: number; to: number; term: number }; arrivesAt: number; seq: number }[] }
+  step: {
+    inFlight: readonly {
+      message: { type: string; from: number; to: number; term: number }
+      arrivesAt: number
+      seq: number
+    }[]
+  }
   dict: ReturnType<typeof dictionary>
 }) {
   return (
-    <div>
-      <h3 className="font-sans text-xs text-ink-faint">{dict.sim.inFlight}</h3>
+    <div className="mt-4 border-t border-ink-rule pt-3">
+      <h3 className="field-label">{dict.sim.inFlight}</h3>
       {step.inFlight.length === 0 ? (
-        <p className="font-sans text-xs text-ink-faint">{dict.sim.noMessages}</p>
+        <p className="mt-1 font-sans text-micro text-ink-faint">{dict.sim.noMessages}</p>
       ) : (
-        <ul className="mt-1 max-h-32 overflow-y-auto font-mono text-[11px] tabular text-ink-soft">
+        <ul className="mt-1.5 max-h-32 overflow-y-auto font-mono text-micro tabular text-ink-soft">
           {step.inFlight.slice(0, 12).map((flight) => (
-            <li key={flight.seq}>
+            <li key={flight.seq} className="py-0.5">
               n{flight.message.from}→n{flight.message.to} {flight.message.type} t
               {flight.message.term} @{flight.arrivesAt}
             </li>

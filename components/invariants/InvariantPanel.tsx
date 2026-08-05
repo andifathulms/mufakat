@@ -54,7 +54,10 @@ export function InvariantPanel({ violations, upToStep, dict, onJump }: Props) {
               key={property}
               className={[
                 'border-b border-ink-rule py-2',
-                broken ? 'bg-vermilion/10' : '',
+                // A 10% tint drops vermilion-on-tint to 4.39:1 against the page.
+                // 5% holds 5.30:1 on the card it sits in, and the row still reads as
+                // the only tinted one in the list.
+                broken ? 'bg-vermilion/5' : '',
               ].join(' ')}
             >
               <div className="flex items-center gap-2">
@@ -71,18 +74,23 @@ export function InvariantPanel({ violations, upToStep, dict, onJump }: Props) {
                 >
                   {broken ? '×' : '✓'}
                 </span>
-                <span className="font-mono text-xs">{dict.invariants.names[property]}</span>
+                <span className="font-mono text-data">{dict.invariants.names[property]}</span>
                 <span
                   className={[
-                    'ml-auto font-sans text-[11px]',
+                    'ml-auto font-sans text-micro',
                     broken ? 'text-vermilion font-semibold' : 'text-ink-faint',
                   ].join(' ')}
                 >
                   {broken ? dict.invariants.broken : dict.invariants.holding}
                 </span>
               </div>
+              {/* The formal statement is what the checker evaluates; this is what the
+                  formal statement means. An indicator nobody can read is decoration. */}
+              <p className="mt-1 pl-6 font-sans text-micro leading-relaxed text-ink-soft">
+                {dict.plain.properties[property]}
+              </p>
               {violation !== undefined && (
-                <div className="mt-1.5 pl-6 text-[11px] font-sans text-ink">
+                <div className="mt-2 pl-6 font-sans text-micro text-ink">
                   {/* Stated flatly, with the mechanism named. No alarm language. */}
                   <p>{violation.summary}</p>
                   <p className="mt-1 text-ink-faint font-mono tabular">
@@ -93,7 +101,7 @@ export function InvariantPanel({ violations, upToStep, dict, onJump }: Props) {
                   </p>
                   <button
                     type="button"
-                    className="mt-1 border border-vermilion px-2 py-0.5 text-vermilion hover:bg-vermilion hover:text-stock-pale"
+                    className="btn btn-small btn-violation mt-2"
                     onClick={() => onJump(violation.stepIndex)}
                   >
                     {dict.invariants.stepBack}
@@ -105,7 +113,9 @@ export function InvariantPanel({ violations, upToStep, dict, onJump }: Props) {
         })}
       </ul>
       {firstByProperty.size === 0 && (
-        <p className="text-[11px] font-sans text-ink-faint">{dict.invariants.allHolding}</p>
+        <p className="font-sans text-micro leading-relaxed text-ink-faint">
+          {dict.invariants.allHolding}
+        </p>
       )}
     </section>
   )
